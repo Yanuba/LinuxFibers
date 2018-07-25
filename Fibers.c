@@ -10,7 +10,7 @@
 int main() {
     int fd = -1;
 
-    if((fd = open("/dev/FibersLKM", O_RDWR)) == -1) {
+    if((fd = open("/dev/FibersLKM", O_RDONLY)) == -1) {
 		perror("Error opening special device file");
 		exit(EXIT_FAILURE);
 	}

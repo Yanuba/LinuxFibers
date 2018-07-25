@@ -35,6 +35,17 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     return 0;
 }
 
+//Copyed from tty driver
+static char *fiber_devnode(struct device *dev, umode_t *mode)
+{
+    if (!mode)
+            return NULL;
+    if (dev->devt == MKDEV(dev_major, 0) ||
+        dev->devt == MKDEV(dev_major, 2))
+            *mode = 0666;
+    return NULL;
+}
+
 static int __init fibers_init(void) 
 {   
     int ret;
@@ -55,6 +66,8 @@ static int __init fibers_init(void)
         goto fail_classcreate;
     }
 
+    device_class->devnode = fiber_devnode;
+    
     //create device
     device = device_create(device_class, NULL, MKDEV(dev_major,0), NULL, KBUILD_MODNAME);
     if (IS_ERR(device)) {
