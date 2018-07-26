@@ -66,7 +66,7 @@ static int __init fibers_init(void)
         goto fail_classcreate;
     }
 
-    device_class->devnode = fiber_devnode;
+    device_class->devnode = fiber_devnode; //to set permission on device file
     
     //create device
     device = device_create(device_class, NULL, MKDEV(dev_major,0), NULL, KBUILD_MODNAME);
