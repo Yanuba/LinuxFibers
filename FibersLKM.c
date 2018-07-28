@@ -2,7 +2,8 @@
 #include <linux/kernel.h>
 #include <linux/fs.h> //for file system operations
 #include <linux/device.h>
-#include <linux/sched.h>
+#include <linux/ptrace.h>
+#include <linux/sched/task_stack.h> //this makes me feel really bad :(
 
 #include "FibersLKM.h"
 
@@ -19,11 +20,42 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
+/**/
+struct pt_regs *regs = NULL;
+/**/
+
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {
     switch(cmd) {
         case IOCTL_EX:
             printk(KERN_NOTICE "%s: Pid is %d\n", KBUILD_MODNAME, current->pid);
+            
+            /* WIll this work? */
+            regs = task_pt_regs(current);   
+            /*          
+            printk(KERN_NOTICE "%s: r15 is %ld\n", KBUILD_MODNAME, regs->r15);
+            printk(KERN_NOTICE "%s: r14 is %ld\n", KBUILD_MODNAME, regs->r14);
+            printk(KERN_NOTICE "%s: r13 is %ld\n", KBUILD_MODNAME, regs->r13);
+            printk(KERN_NOTICE "%s: r12 is %ld\n", KBUILD_MODNAME, regs->r12);
+            printk(KERN_NOTICE "%s: rbp is %ld\n", KBUILD_MODNAME, regs->bp);
+            printk(KERN_NOTICE "%s: rbx is %ld\n", KBUILD_MODNAME, regs->bx);
+            printk(KERN_NOTICE "%s: r11 is %ld\n", KBUILD_MODNAME, regs->r11);
+            printk(KERN_NOTICE "%s: r10 is %ld\n", KBUILD_MODNAME, regs->r10);
+            printk(KERN_NOTICE "%s: r9  is %ld\n", KBUILD_MODNAME, regs->r9);
+            printk(KERN_NOTICE "%s: r8  is %ld\n", KBUILD_MODNAME, regs->r8);
+            printk(KERN_NOTICE "%s: rax is %ld\n", KBUILD_MODNAME, regs->ax);
+            printk(KERN_NOTICE "%s: rcx is %ld\n", KBUILD_MODNAME, regs->cx);
+            printk(KERN_NOTICE "%s: rdx is %ld\n", KBUILD_MODNAME, regs->dx);
+            printk(KERN_NOTICE "%s: rsi is %ld\n", KBUILD_MODNAME, regs->si);
+            printk(KERN_NOTICE "%s: rdi is %ld\n", KBUILD_MODNAME, regs->di);
+            printk(KERN_NOTICE "%s: o_rax is %ld\n", KBUILD_MODNAME, regs->orig_ax);
+            printk(KERN_NOTICE "%s: rip is %ld\n", KBUILD_MODNAME, regs->ip);
+            printk(KERN_NOTICE "%s: cs  is %ld\n", KBUILD_MODNAME, regs->cs);
+            printk(KERN_NOTICE "%s: eflags is %ld\n", KBUILD_MODNAME, regs->flags);
+            printk(KERN_NOTICE "%s: rsp is %ld\n", KBUILD_MODNAME, regs->sp);
+            printk(KERN_NOTICE "%s: ss  is %ld\n", KBUILD_MODNAME, regs->ss);
+            printk(KERN_NOTICE "%s: Please don't puke \n", KBUILD_MODNAME);
+            */
             break;
         case 0:
             printk(KERN_NOTICE "%s: Default ioctl called\n", KBUILD_MODNAME);
