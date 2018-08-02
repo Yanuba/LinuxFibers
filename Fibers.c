@@ -6,6 +6,18 @@
 #include <stropts.h>
 
 #include "FibersLKM.h"
+#include "Fibers.h"
+
+void ConvertThreadToFiber() {
+    int fd = open("/dev/FibersLKM", O_RDONLY);
+    if (fd == -1) {
+        perror("Error opening special device file");
+        return;
+    }
+    ioctl(fd, IOCTL_CONVERT);
+    close(fd);
+    return;
+}
 
 int main() {
     int fd = -1;
@@ -18,6 +30,9 @@ int main() {
 	printf("I'm process %d\n", getpid()); 
 
     ioctl(fd, IOCTL_EX);
+
+    ConvertThreadToFiber();
+    ConvertThreadToFiber();
 
     return close(fd);
 }
