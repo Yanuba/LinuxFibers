@@ -23,9 +23,9 @@ static struct file_operations fops = {
 
 /* Here we store only the status of one 'Fiber' */
 struct pt_regs *regs = NULL;
-struct thread_struct ts = NULL;
-/* Maybe use thread_struct to do the context switch (is the tss) */
-/**/
+/* For context switch thry using thread_struct or tss_struct
+ * Download Quaglia slides, it may conta9in useful info for this project
+ */
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {
