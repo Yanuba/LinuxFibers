@@ -6,6 +6,8 @@
 
 #define IOCTL_EX _IO(IOCTL_MAGIC_NUM, 100)
 
+struct fiber_struct;
+
 /*
 
 #define ConvertThreadToFiber() ult_convert()
@@ -35,7 +37,7 @@
 
 //Fibers IOCTL
 
-#define IOCTL_CONVERT _IO(IOCTL_MAGIC_NUM, 0) //ConvertThreadToFiber()
+#define IOCTL_CONVERT _IOR(IOCTL_MAGIC_NUM, 0, /*Type passed here*/long) //ConvertThreadToFiber()
 #define IOCTL_CREATE _IOW(IOCTL_MAGIC_NUM, 1, /*Type passed here*/long) //CreateFiber(...)
 #define IOCTL_SWITCH _IOW(IOCTL_MAGIC_NUM, 2, /*Type passed here*/long) //SwitchToFiber(...)
 

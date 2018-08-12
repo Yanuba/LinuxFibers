@@ -8,6 +8,14 @@
 
 #include "FibersLKM.h"
 
+/*
+ * Only a fiber can switch to another fiber. 
+ * If we want to use switchTo, we must use ConvertThreadTofiber in the current thread.
+ * Fibers are shared across the process, a Fiber can switch to a fiber created in another thread.
+ * 
+ * We can keep a list of threads relying on fibers, and a list of active fibers within a process. (See notes for details.)
+ * 
+ */
 
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
 

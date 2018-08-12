@@ -1,1 +1,1 @@
-void ConvertThreadToFiber();
+void *ConvertThreadToFiber();

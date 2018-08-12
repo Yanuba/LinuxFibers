@@ -8,15 +8,22 @@
 #include "FibersLKM.h"
 #include "Fibers.h"
 
-void ConvertThreadToFiber() {
+void *ConvertThreadToFiber() {
+    int ret;
     int fd = open("/dev/FibersLKM", O_RDONLY);
     if (fd == -1) {
         perror("Error opening special device file");
         return;
     }
-    ioctl(fd, IOCTL_CONVERT);
+
+    struct fiber_struct ctx;
+
+    ret = ioctl(fd, IOCTL_CONVERT, &ctx);
+    
+    //check ret value
+    
     close(fd);
-    return;
+    return ctx;
 }
 
 int main() {
