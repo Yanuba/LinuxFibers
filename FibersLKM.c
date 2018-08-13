@@ -1,13 +1,13 @@
 #include <linux/module.h>
-#include <linux/kernel.h>
 #include <linux/device.h>
-#include <linux/fs.h> //for file system operations
+#include <linux/uaccess.h>
 
-/* 
-#include <linux/ptrace.h>
-#include <linux/sched/task_stack.h> //this makes me feel really bad :(
-#include <linux/processor.h>
+/*
+#include <linux/kernel.h>
+#include <linux/fs.h> //for file system operations
 */
+
+
 #include "FibersLKM.h"
 
 /*
@@ -33,19 +33,89 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
-/* Here we store only the status of one 'Fiber' */
-//struct pt_regs *regs = NULL;
-/* For context switch thry using thread_struct or tss_struct
- * Download Quaglia slides, it may conta9in useful info for this project
- */
-
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
-{
-    switch(cmd) {
-        case IOCTL_EX:
-            printk(KERN_NOTICE "%s: Pid is %d\n", KBUILD_MODNAME, current->pid);
+{   
+    struct fiber_struct_usr idx_next; //maybe is not neede
+    switch(cmd) {          
+        case IOCTL_CONVERT:
             
-            /* WIll this work? */
+            /*
+            ConvertThreadToFiber(): creates a Fiber in the current thread. 
+            From now on, other Fibers can be created.
+            */       
+            printk(KERN_NOTICE "%s: 'ConvertThreadToFiber()' Not Implemented yet\n", KBUILD_MODNAME);
+            break;
+
+        case IOCTL_CREATE:
+            
+            /*
+            CreateFiber(): creates a new Fiber context,
+            assigns a separate stack, sets up the execution entry
+            point (associated to a function passed as argument to
+            the function)Fibers
+            */
+            printk(KERN_NOTICE "%s: 'CreateFiber()' Not Implemented yet\n", KBUILD_MODNAME);
+            break;
+
+        case IOCTL_SWITCH:
+
+            printk(KERN_NOTICE "%s: 'SwitchToFiber()' Does nothing yet\n", KBUILD_MODNAME);
+            if (copy_from_user(&idx_next, (void *) arg, sizeof(struct fiber_struct_usr))) { //help, if idx_next is deleted how we can do this?
+                //cannot copy, must do something
+                printk(KERN_NOTICE "%s: Cannot take input from userspace\n", KBUILD_MODNAME);    
+            }
+            printk(KERN_NOTICE "%s: Copyed input from userspace, %d\n", KBUILD_MODNAME, idx_next.info);   
+            
+            //look for the fiber in the module memory
+            //  If (found):
+            //      Do the checks and eventually the context switch;
+            //  else:
+            //      Do nothing
+            
+            /*
+            SwitchToFiber(): switches the execution context
+            (in the caller thread) to a different Fiber (it can fail if
+            switching to a Fiber which is already active)
+            */   
+            break;
+
+        case IOCTL_ALLOC:
+            
+            /*
+            FlsAlloc() : Allocates a FLS index
+            */ 
+            printk(KERN_NOTICE "%s: 'FlsAlloc()' Not Implemented yet\n", KBUILD_MODNAME);
+            break;
+
+        case IOCTL_FREE: 
+            
+            /*
+            FlsFree() : Frees a FLS index
+            */
+            printk(KERN_NOTICE "%s: 'FlsFree()' Not Implemented yet\n", KBUILD_MODNAME);
+            break;
+
+        case IOCTL_GET: 
+            
+            /*
+            FlsGetValue() : Gets the value associated with a FLS
+            index (a long)
+            */
+            printk(KERN_NOTICE "%s: 'FlsGetValue()' Not Implemented yet\n", KBUILD_MODNAME);
+            break;
+
+        case IOCTL_SET:
+            
+            /*
+            FlsSetValue() : Sets a value associated with a FLS
+            index (a long)
+            */
+            printk(KERN_NOTICE "%s: 'FlsSetValue()' Not Implemented yet\n", KBUILD_MODNAME);
+            break;
+
+        default:
+        
+            printk(KERN_NOTICE "%s: Pid is %d\n", KBUILD_MODNAME, current->pid);
             //regs = task_pt_regs(current);   
             /*
             {          
@@ -73,59 +143,10 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             printk(KERN_NOTICE "%s: Please don't puke \n", KBUILD_MODNAME);
             }
             */
-            break;
-        case IOCTL_CONVERT:
-            /*
-            ConvertThreadToFiber(): creates a Fiber in the current thread. 
-            From now on, other Fibers can be created.
-            */       
-            printk(KERN_NOTICE "%s: 'ConvertThreadToFiber()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
-        case IOCTL_CREATE:
-            /*
-            CreateFiber(): creates a new Fiber context,
-            assigns a separate stack, sets up the execution entry
-            point (associated to a function passed as argument to
-            the function)Fibers
-            */
-            printk(KERN_NOTICE "%s: 'CreateFiber()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
-        case IOCTL_SWITCH:
-            printk(KERN_NOTICE "%s: 'SwitchToFiber()' Not Implemented yet\n", KBUILD_MODNAME);
-            /*
-            SwitchToFiber(): switches the execution context
-            (in the caller thread) to a different Fiber (it can fail if
-            switching to a Fiber which is already active)
-            */   
-           break;
-        case IOCTL_ALLOC:
-            /*
-            FlsAlloc() : Allocates a FLS index
-            */ 
-            printk(KERN_NOTICE "%s: 'FlsAlloc()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
-        case IOCTL_FREE: 
-             /*
-            FlsFree() : Frees a FLS index
-            */
-            printk(KERN_NOTICE "%s: 'FlsFree()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
-        case IOCTL_GET: 
-            /*
-            FlsGetValue() : Gets the value associated with a FLS
-            index (a long)
-            */
-            printk(KERN_NOTICE "%s: 'FlsGetValue()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
-        case IOCTL_SET:
-            /*
-            FlsSetValue() : Sets a value associated with a FLS
-            index (a long)
-            */
-            printk(KERN_NOTICE "%s: 'FlsSetValue()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
-        default:
+            
             printk(KERN_NOTICE "%s: Default ioctl called\n", KBUILD_MODNAME);
+            return -ENOTTY;
+            break;
     }
     return 0;
 }
