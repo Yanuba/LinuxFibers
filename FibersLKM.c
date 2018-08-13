@@ -1,11 +1,13 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/fs.h> //for file system operations
 #include <linux/device.h>
+#include <linux/fs.h> //for file system operations
+
+/* 
 #include <linux/ptrace.h>
 #include <linux/sched/task_stack.h> //this makes me feel really bad :(
 #include <linux/processor.h>
-
+*/
 #include "FibersLKM.h"
 
 /*
@@ -14,6 +16,8 @@
  * Fibers are shared across the process, a Fiber can switch to a fiber created in another thread.
  * 
  * We can keep a list of threads relying on fibers, and a list of active fibers within a process. (See notes for details.)
+ * 
+ * How to keep the info about the fiber running in the current thread?
  * 
  */
 
@@ -30,7 +34,7 @@ static struct file_operations fops = {
 };
 
 /* Here we store only the status of one 'Fiber' */
-struct pt_regs *regs = NULL;
+//struct pt_regs *regs = NULL;
 /* For context switch thry using thread_struct or tss_struct
  * Download Quaglia slides, it may conta9in useful info for this project
  */
@@ -42,7 +46,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             printk(KERN_NOTICE "%s: Pid is %d\n", KBUILD_MODNAME, current->pid);
             
             /* WIll this work? */
-            regs = task_pt_regs(current);   
+            //regs = task_pt_regs(current);   
             /*
             {          
             printk(KERN_NOTICE "%s: r15 is %ld\n", KBUILD_MODNAME, regs->r15);

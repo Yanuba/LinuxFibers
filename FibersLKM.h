@@ -6,11 +6,24 @@
 
 #define IOCTL_EX _IO(IOCTL_MAGIC_NUM, 100)
 
-struct fiber_struct;
+struct fiber_struct {
+
+};
+
+/*
+struct fiber_struct {
+    short status; //1 running, 0 not running 
+    unsigned long entry_point; //addess of the function executed
+    struct pt_regs cpu_context;
+    long activations;
+    long failed_activations;
+    long time_elapsed; //how we compute this?
+    // Other Parameters?
+}
+*/
 
 /*
 
-#define ConvertThreadToFiber() ult_convert()
 #define CreateFiber(dwStackSize, lpStartAddress, lpParameter) ult_creat(dwStackSize, lpStartAddress, lpParameter)
 #define SwitchToFiber(lpFiber) ult_switch_to(lpFiber)
 #define FlsAlloc(lpCallback) fls_alloc()
@@ -47,21 +60,3 @@ struct fiber_struct;
 #define IOCTL_FREE _IOW(IOCTL_MAGIC_NUM, 4, /*Type passed here*/long) //FlsFree(...)
 #define IOCTL_GET _IOWR(IOCTL_MAGIC_NUM, 5, /*Type passed here*/long) //FlsGetValue(...)
 #define IOCTL_SET _IOW(IOCTL_MAGIC_NUM, 6, /*Type passed here*/long) //FlsSetValue(...)
-
-
-/*
-struct fiber_struct {
-    short status; //1 running, 0 not running 
-    unsigned long entry_point; //addess of the function executed
-    struct pt_regs cpu_context;
-    long activations;
-    long failed_activations;
-    long time_elapsed; //how we compute this?
-    // Other Parameters?
-    //
-    //
-    //
-    //
-    //
-}
-*/
