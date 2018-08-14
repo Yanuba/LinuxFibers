@@ -10,6 +10,7 @@
 #include <linux/fs.h> //for file system operations
 */
 
+/* Suffer of memory leak */
 
 #include "FibersLKM.h"
 

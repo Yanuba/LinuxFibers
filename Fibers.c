@@ -91,7 +91,6 @@ void FlsSetValue(long index, void* value){
 
 void * thread_routine(void* arg) {
     void* fib = ConvertThreadToFiber();
-    SwitchToFiber(fib);
     printf("My pid is %d\n", getpid());
     return 0;
 }
@@ -100,12 +99,15 @@ int main() {
     
     pthread_t t1;
     pthread_t t2;
+    pthread_t t3;
     
     pthread_create(&t1, NULL, thread_routine, NULL);
     pthread_create(&t2, NULL, thread_routine, NULL);
+    pthread_create(&t3, NULL, thread_routine, NULL);
 
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
+    pthread_join(t3, NULL);
 
     //ConvertThreadToFiber();
 
