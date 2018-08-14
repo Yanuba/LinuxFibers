@@ -2,17 +2,8 @@
 
 #include <linux/ioctl.h>
 
-struct fiber_struct {
-    /* How we save the context? pt_regs? To perform contex switch it may be useful use thread_struct or tss_struct */
-
-    /* Fields to be exposed in proc */
-    short   status;                 //The fiber is running or not?
-    void*   (*entry_point)(void*);   //entry point of the fiber
-    pid_t   parent_thread;          //pid of the thread that created the fiber
-    int     activations;            //the number of current activations of the Fiber
-    int     failed_activations;     //the number of failed activations
-    long    execution_time;         //total execution time in that Fiber context
-};
+#define FIBER_RUNNING 1
+#define FIBER_WAITING 0
 
 //struct used to expose information needed to use the module
 struct fiber_struct_usr {
