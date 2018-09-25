@@ -25,7 +25,7 @@ void *ConvertThreadToFiber() {
     ret = ioctl(fd, IOCTL_CONVERT, ctx);
     
     //check ret value    
-    //add an atexit() in order to issue a call in order to cleanup the module when the process exits?
+    //probe do_exit to perform cleanup operations
 
     close(fd);
     return ctx;

@@ -3,35 +3,37 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 
+#include <linux/hashtable.h>
 
-/*
-#include <linux/list.h>
-#include <linux/kernel.h>
-#include <linux/fs.h> //for file system operations
-*/
-
+//for pt regs and fpu
+#include <linux/ptrace.h>
+#include <linux/sched/task_stack.h>
+#include <asm/fpu/internal.h>
 /* Suffer of memory leak */
 
 #include "FibersLKM.h"
 
 struct fiber_struct {
-    /* How we save the context? pt_regs? To perform contex switch it may be useful use thread_struct or tss_struct */
 
-    struct list_head queue; //to queue fibers
+    struct list_head queue; //must queue fibers, we use a list or we use hash list?
+
+    //need an id to discriminate fibers?
+
+    pid_t fiber_id;
+
+    struct pt_regs regs; //regs = task_pt_regs(current); (where regs is of type struct pt_regs*)  
+    struct fpu fpu_regs; //fpu__save(struct fpu *) and fpu__restore(struct fpu *)?
+
+    pid_t parent_process; //key in the hash table
 
     /* Fields to be exposed in proc */
     short   status;                 //The fiber is running or not?
-    void*   (*entry_point)(void*);   //entry point of the fiber
+    void*   (*entry_point)(void*);  //entry point of the fiber (EIP)
     pid_t   parent_thread;          //pid of the thread that created the fiber
     int     activations;            //the number of current activations of the Fiber
     int     failed_activations;     //the number of failed activations
     long    execution_time;         //total execution time in that Fiber context
 };
-
-
-/*
- * Need to increment module reference counter, to avoid to unload the module when some thread is using it 
- * */
 
 /*
  * Only a fiber can switch to another fiber. 
@@ -42,20 +44,26 @@ struct fiber_struct {
  * 
  * How to keep the info about the fiber running in the current thread?
  * 
+ *
+ * HOW TO CLEANUP?
+ *
  */
-struct active_process {
+
+/* 
+ * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
+ * Max pid is 32768, which require 16 bytes (so 15 bits are enough for not having collisions)
+ * */
+DEFINE_HASHTABLE(process_table, 15);
+
+struct process_active {
     pid_t pid;                          //process id
-    struct list_head other;             //other process in the list
-    struct list_head running_fibers;    //running fibers of the process
-    struct list_head waiting_fibers;    //waiting fibers of the process
+    pid_t num_fiber;                    //will be next fiber id                        
+    struct hlist_head running_fibers;   //running fibers of the process
+    struct hlist_head waiting_fibers;   //waiting fibers of the process
+    struct hlist_node other;            //other process in the bucket
 };
 
-//struct active_process* pocess_list = NULL;
-struct list_head process_list;
-
-/*
- * We may keep for each process two lists: a list of running fibers, and a list of not running ones.
- * */
+/* ******************************************************************* */
 
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
 
@@ -69,6 +77,8 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
+/* ******************************************************************* */
+
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
     pid_t caller_pid;
@@ -78,33 +88,41 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     struct fiber_struct_usr *idx_next; 
     struct active_process *process;
     struct fiber_struct *fiber;
-    struct list_head *cursor;
+    struct process_active *cursor;
 
     caller_pid = task_tgid_nr(current);
     caller_tid = task_pid_nr(current);
 
-    printk(KERN_NOTICE "%s: The caller process is:%d, the thread id %d\n", KBUILD_MODNAME, caller_pid, caller_tid);
-
-    switch(cmd) { 
-        
-        /* Need some adjustement */        
+    switch(cmd) {        
         case IOCTL_CONVERT:
-            printk(KERN_NOTICE "%s: ConvertThreadToFiber()\n", KBUILD_MODNAME);
-            list_for_each(cursor, &process_list) {
-                process = list_entry(cursor, struct active_process, other);
-                if (process->pid == caller_pid) {
-                    printk(KERN_NOTICE "%s: Process %d is activate\n", KBUILD_MODNAME, caller_pid);
-                    goto look_for_fiber;
+            /* 
+             * Check whether the current thread is already a fiber
+             * Allocate a new Fiber
+             * Return data to userspace
+             */
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            
+            hash_for_each_possible(process_table, cursor, other, caller_pid) {
+                if (cursor->pid == caller_pid) {
+                    printk(KERN_NOTICE "%s: Process %d is activated\n", KBUILD_MODNAME, caller_pid);
+                    //look for fiber
+                        //if fiber for current thread already exist return error
+                        //else allocate a new fiber context
                 }
             }
+
+            //create new process
+            cursor = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
+            cursor->pid = caller_pid;
+            cursor->num_fiber = 1;       
+            INIT_HLIST_HEAD(&cursor->running_fibers);
+            INIT_HLIST_HEAD(&cursor->waiting_fibers);
+            INIT_HLIST_NODE(&cursor->other);
             
+            //allocate new fiber context
+
+   /********/
             //we have found nothing, create a new active process
-            process = (struct active_process *) kmalloc(sizeof(struct active_process), GFP_KERNEL);
-            process->pid = caller_pid;
-            
-            INIT_LIST_HEAD(&(process->other));
-            INIT_LIST_HEAD(&(process->running_fibers));
-            INIT_LIST_HEAD(&(process->waiting_fibers));
             
             list_add_tail(&(process->other), &process_list);
             printk(KERN_NOTICE "%s: Process %d is now active\n", KBUILD_MODNAME, caller_pid);
@@ -151,7 +169,7 @@ look_for_fiber:
             printk(KERN_NOTICE "%s: Passed input to userspace\n", KBUILD_MODNAME);
             kfree(idx_next);
             return 0;
-
+    /********/
             /*
             ConvertThreadToFiber(): creates a Fiber in the current thread. 
             From now on, other Fibers can be created.
@@ -227,36 +245,6 @@ look_for_fiber:
             break;
 
         default:
-
-            printk(KERN_NOTICE "%s: Pid is %d\n", KBUILD_MODNAME, current->pid);
-            //regs = task_pt_regs(current);   
-            /*
-            {          
-            printk(KERN_NOTICE "%s: r15 is %ld\n", KBUILD_MODNAME, regs->r15);
-            printk(KERN_NOTICE "%s: r14 is %ld\n", KBUILD_MODNAME, regs->r14);
-            printk(KERN_NOTICE "%s: r13 is %ld\n", KBUILD_MODNAME, regs->r13);
-            printk(KERN_NOTICE "%s: r12 is %ld\n", KBUILD_MODNAME, regs->r12);
-            printk(KERN_NOTICE "%s: rbp is %ld\n", KBUILD_MODNAME, regs->bp);
-            printk(KERN_NOTICE "%s: rbx is %ld\n", KBUILD_MODNAME, regs->bx);
-            printk(KERN_NOTICE "%s: r11 is %ld\n", KBUILD_MODNAME, regs->r11);
-            printk(KERN_NOTICE "%s: r10 is %ld\n", KBUILD_MODNAME, regs->r10);
-            printk(KERN_NOTICE "%s: r9  is %ld\n", KBUILD_MODNAME, regs->r9);
-            printk(KERN_NOTICE "%s: r8  is %ld\n", KBUILD_MODNAME, regs->r8);
-            printk(KERN_NOTICE "%s: rax is %ld\n", KBUILD_MODNAME, regs->ax);
-            printk(KERN_NOTICE "%s: rcx is %ld\n", KBUILD_MODNAME, regs->cx);
-            printk(KERN_NOTICE "%s: rdx is %ld\n", KBUILD_MODNAME, regs->dx);
-            printk(KERN_NOTICE "%s: rsi is %ld\n", KBUILD_MODNAME, regs->si);
-            printk(KERN_NOTICE "%s: rdi is %ld\n", KBUILD_MODNAME, regs->di);
-            printk(KERN_NOTICE "%s: o_rax is %ld\n", KBUILD_MODNAME, regs->orig_ax);
-            printk(KERN_NOTICE "%s: rip is %ld\n", KBUILD_MODNAME, regs->ip);
-            printk(KERN_NOTICE "%s: cs  is %ld\n", KBUILD_MODNAME, regs->cs);
-            printk(KERN_NOTICE "%s: eflags is %ld\n", KBUILD_MODNAME, regs->flags);
-            printk(KERN_NOTICE "%s: rsp is %ld\n", KBUILD_MODNAME, regs->sp);
-            printk(KERN_NOTICE "%s: ss  is %ld\n", KBUILD_MODNAME, regs->ss);
-            printk(KERN_NOTICE "%s: Please don't puke \n", KBUILD_MODNAME);
-            }
-            */
-            
             printk(KERN_NOTICE "%s: Default ioctl called\n", KBUILD_MODNAME);
             return -ENOTTY;
             break;
@@ -278,7 +266,6 @@ static char *fiber_devnode(struct device *dev, umode_t *mode)
 static int __init fibers_init(void) 
 {   
     int ret;
-    INIT_LIST_HEAD(&process_list);
 
     /* Device allocation code */
 
@@ -309,6 +296,9 @@ static int __init fibers_init(void)
     }
 
     printk(KERN_NOTICE "%s: Module mounted, device registered with major %d \n", KBUILD_MODNAME, dev_major);
+
+    hash_init(process_table); 
+
     return 0;
 
     fail_devcreate:
