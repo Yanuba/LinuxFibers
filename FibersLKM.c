@@ -9,26 +9,21 @@
 #include <linux/ptrace.h>
 #include <linux/sched/task_stack.h>
 #include <asm/fpu/internal.h>
-/* Suffer of memory leak */
 
 #include "FibersLKM.h"
 
 struct fiber_struct {
-
-    struct list_head queue; //must queue fibers, we use a list or we use hash list?
-
-    //need an id to discriminate fibers?
-
     pid_t fiber_id;
-
+    struct hlist_node next; //must queue fibers
+    
+    //maybe we need only the pointer?
     struct pt_regs regs; //regs = task_pt_regs(current); (where regs is of type struct pt_regs*)  
     struct fpu fpu_regs; //fpu__save(struct fpu *) and fpu__restore(struct fpu *)?
-
-    pid_t parent_process; //key in the hash table
 
     /* Fields to be exposed in proc */
     short   status;                 //The fiber is running or not?
     void*   (*entry_point)(void*);  //entry point of the fiber (EIP)
+    pid_t   parent_process;         //key in the hash table
     pid_t   parent_thread;          //pid of the thread that created the fiber
     int     activations;            //the number of current activations of the Fiber
     int     failed_activations;     //the number of failed activations
@@ -44,8 +39,7 @@ struct fiber_struct {
  * 
  * How to keep the info about the fiber running in the current thread?
  * 
- *
- * HOW TO CLEANUP?
+ * HOW TO CLEANUP? Probe do_exit?
  *
  */
 
@@ -84,11 +78,11 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     pid_t caller_pid;
     pid_t caller_tid;
 
+    struct process_active *process_cursor;
+    struct fiber_struct *fiber_cursor;
+
     //maybe is not needed
     struct fiber_struct_usr *idx_next; 
-    struct active_process *process;
-    struct fiber_struct *fiber;
-    struct process_active *cursor;
 
     caller_pid = task_tgid_nr(current);
     caller_tid = task_pid_nr(current);
@@ -96,85 +90,60 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     switch(cmd) {        
         case IOCTL_CONVERT:
             /* 
+             * @TO_DO
              * Check whether the current thread is already a fiber
              * Allocate a new Fiber
              * Return data to userspace
              */
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
-            hash_for_each_possible(process_table, cursor, other, caller_pid) {
-                if (cursor->pid == caller_pid) {
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
                     printk(KERN_NOTICE "%s: Process %d is activated\n", KBUILD_MODNAME, caller_pid);
-                    //look for fiber
+                    //look for fiber (only active one are needed)
                         //if fiber for current thread already exist return error
                         //else allocate a new fiber context
                 }
             }
 
-            //create new process
-            cursor = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
-            cursor->pid = caller_pid;
-            cursor->num_fiber = 1;       
-            INIT_HLIST_HEAD(&cursor->running_fibers);
-            INIT_HLIST_HEAD(&cursor->waiting_fibers);
-            INIT_HLIST_NODE(&cursor->other);
+            //create new struct process information
+            process_cursor = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
+            process_cursor->pid = caller_pid;
+            process_cursor->num_fiber = 1;       
+            INIT_HLIST_HEAD(&process_cursor->running_fibers);
+            INIT_HLIST_HEAD(&process_cursor->waiting_fibers);
+            INIT_HLIST_NODE(&process_cursor->other);
             
+            //add process information to hash table
+            hash_add(process_table, &process_cursor->other, process_cursor->pid);
+
             //allocate new fiber context
+            fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
+            fiber_cursor->fiber_id = process_cursor->num_fiber;
+            fiber_cursor->parent_process = process_cursor->pid;
+            fiber_cursor->parent_thread = caller_tid;
+            fiber_cursor->status = FIBER_RUNNING;
 
-   /********/
-            //we have found nothing, create a new active process
-            
-            list_add_tail(&(process->other), &process_list);
-            printk(KERN_NOTICE "%s: Process %d is now active\n", KBUILD_MODNAME, caller_pid);
+            //save pt_regs?
+            //save fpu_regs?
 
-look_for_fiber:
-            printk(KERN_NOTICE "%s: Looking for the fiber\n", KBUILD_MODNAME);
-            list_for_each(cursor, &(process->running_fibers)) {
-                fiber = list_entry(cursor, struct fiber_struct, queue);
-                if (fiber->parent_thread == caller_tid) {
-                    printk(KERN_NOTICE "%s: Fiber for thread %d are active\n", KBUILD_MODNAME, caller_tid);
-                    return -1; //change this
-                }
-            }
-            list_for_each(cursor, &(process->waiting_fibers)) {
-                fiber = list_entry(cursor, struct fiber_struct, queue);
-                if (fiber->parent_thread == caller_tid) {
-                    printk(KERN_NOTICE "%s: Fiber for thread %d are active\n", KBUILD_MODNAME, caller_tid);
-                    return -1; //change this
-                }
-            }
-        
-        printk(KERN_NOTICE "%s: Allocating first fiber for thread %d\n", KBUILD_MODNAME, caller_tid);
-
-            fiber = (struct fiber_struct *) kmalloc(sizeof(struct fiber_struct), GFP_KERNEL);
-            /*
-             * Initilize fiber data
+            /* 
+             * Init other Fiber fields: 
+             * activations,
+             * failed activations,
+             * execution time;
              * */
-            fiber->status = FIBER_WAITING;
-            fiber->parent_thread = caller_tid;
-            //other data initialization
-
-            list_add_tail(&(fiber->queue), &(process->waiting_fibers));
-
-            /*
-             * Initilize fiber data to pass userspace
-             * */
-            idx_next = (struct fiber_struct_usr *) kmalloc(sizeof(struct fiber_struct_usr), GFP_KERNEL);
-
-            if (copy_to_user((void *) arg, idx_next, sizeof(struct fiber_struct_usr))) {
-                //cannot copy, must do something
-                printk(KERN_NOTICE "%s: Cannot pass input to userspace\n", KBUILD_MODNAME);    
-            }
             
-            printk(KERN_NOTICE "%s: Passed input to userspace\n", KBUILD_MODNAME);
-            kfree(idx_next);
-            return 0;
-    /********/
+            //add new fiber
+            hlist_add_head(&fiber_cursor->next, &process_cursor->running_fibers);
+
+            //return pid of newly created fiber.
+
             /*
             ConvertThreadToFiber(): creates a Fiber in the current thread. 
             From now on, other Fibers can be created.
             */       
-            //break;
+            break;
 
         case IOCTL_CREATE:
             

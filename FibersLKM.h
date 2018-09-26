@@ -10,6 +10,8 @@ struct fiber_struct_usr {
     int info; //Used just for a try
 };
 
+typedef pid_t fiber_id;
+
 #define IOCTL_MAGIC_NUM ']' //it is not used by any device driver (it should be safe)
 
 //Fibers IOCTL
