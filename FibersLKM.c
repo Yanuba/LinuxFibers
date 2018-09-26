@@ -97,6 +97,11 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
              */
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
+            //can we return data to userspace?
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_id))) {   
+                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
+            }
+
             hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
                 if (process_cursor->pid == caller_pid) {
                     printk(KERN_NOTICE "%s: Process %d is activated\n", KBUILD_MODNAME, caller_pid);
@@ -113,32 +118,39 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             INIT_HLIST_HEAD(&process_cursor->running_fibers);
             INIT_HLIST_HEAD(&process_cursor->waiting_fibers);
             INIT_HLIST_NODE(&process_cursor->other);
-            
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info allocated\n", KBUILD_MODNAME, caller_tid);
+
             //add process information to hash table
             hash_add(process_table, &process_cursor->other, process_cursor->pid);
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info added to table\n", KBUILD_MODNAME, caller_tid);
 
             //allocate new fiber context
             fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
-            fiber_cursor->fiber_id = process_cursor->num_fiber;
+            fiber_cursor->fiber_id = process_cursor->num_fiber++;
             fiber_cursor->parent_process = process_cursor->pid;
             fiber_cursor->parent_thread = caller_tid;
             fiber_cursor->status = FIBER_RUNNING;
-
-            //save pt_regs?
-            //save fpu_regs?
-
             /* 
+             * We must save pt_regs and fpu_regs now? Maybe yes for saving the entrypoint (which is the entrypoint in this case?)
              * Init other Fiber fields: 
              * activations,
              * failed activations,
              * execution time;
              * */
-            
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new fiber context allocated, id is %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
+
+
             //add new fiber
             hlist_add_head(&fiber_cursor->next, &process_cursor->running_fibers);
 
             //return pid of newly created fiber.
+            if (copy_to_user((void *) arg, (void *) &fiber_cursor->fiber_id, sizeof(fiber_id))) {
+                //cannot copy, must do something
+                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);    
+            }
+            
 
+            return 0;
             /*
             ConvertThreadToFiber(): creates a Fiber in the current thread. 
             From now on, other Fibers can be created.

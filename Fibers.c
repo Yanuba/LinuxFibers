@@ -20,15 +20,15 @@ void *ConvertThreadToFiber() {
         return NULL;
     }
 
-    fiber_t *ctx = (fiber_t *) malloc(sizeof(fiber_t)); 
+    fiber_id *id = (fiber_id *) malloc(sizeof(fiber_id)); 
 
-    ret = ioctl(fd, IOCTL_CONVERT, ctx);
+    ret = ioctl(fd, IOCTL_CONVERT, id);
     
     //check ret value    
     //probe do_exit to perform cleanup operations
 
     close(fd);
-    return ctx;
+    return id;
 }
 
 /*
@@ -90,8 +90,8 @@ void FlsSetValue(long index, void* value){
  ********************/
 
 void * thread_routine(void* arg) {
-    void* fib = ConvertThreadToFiber();
-    printf("My pid is %d\n", getpid());
+    fiber_id* fib = ConvertThreadToFiber();
+    printf("My pid is %d, the fid get is: %d\n", getpid(), *fib);
     return 0;
 }
 
