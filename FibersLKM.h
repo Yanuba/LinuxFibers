@@ -16,8 +16,6 @@ struct s_create_args{
     fiber_id ret;
 };
 
-
-
 #define IOCTL_MAGIC_NUM ']' //it is not used by any device driver (it should be safe)
 
 //Fibers IOCTL

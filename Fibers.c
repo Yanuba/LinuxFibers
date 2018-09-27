@@ -58,7 +58,7 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
     void *stack;
 	size_t reminder;
 	if (size <= 0) {
-		size = SIGSTKSZ;
+		size = 8192;
 	}
 
 	// Align the size to the page boundary

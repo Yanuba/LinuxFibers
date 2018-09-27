@@ -1,6 +1,4 @@
-#include "FibersLKM.h" //Expose the fiber_struct to user space, but we cannot manipulate it
-
-typedef struct fiber_struct_usr fiber_t;
+#include "FibersLKM.h"
 
 void *ConvertThreadToFiber(void);
 void *CreateFiber(size_t stack_size, void* (*routine)(void *), void *args);

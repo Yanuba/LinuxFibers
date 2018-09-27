@@ -47,7 +47,7 @@ struct fiber_struct {
 
 /* 
  * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
- * Max pid is 32768, which require 16 bytes (so 15 bits are enough for not having collisions)
+ * Max pid on this system is 32768, 32767 require 15 bytes (which are crearly enough for not having collisions)
  * */
 DEFINE_HASHTABLE(process_table, 15);
 
@@ -171,24 +171,39 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             printk(KERN_NOTICE "%s:  ConvertThreadToFiber() was succesful, exiting...\n", KBUILD_MODNAME); 
             return 0;
             /*
-            ConvertThreadToFiber(): creates a Fiber in the current thread. 
-            From now on, other Fibers can be created.
-            */       
+             * ConvertThreadToFiber(): creates a Fiber in the current thread. 
+             *From now on, other Fibers can be created.
+             */       
             break;
 
         case IOCTL_CREATE:
-            /* check whether the current thread is in a fiber context */
-            /* if don't return error */
-            /* if do allocate new fiber */
-            /* return fiber id*/
+
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(s_create_args))) {
+                printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
+                return -EFAULT; //Is this correct?
+            }
+
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
+                    fiber_cursor = (struct fiber_struct *) kmalloc(GFP_KERNEL, sizeof(struct fiber_struct));
+                    //copy data from userland
+                    //populate fiber struct
+                    //return fiber id
+                }
+            }
+            
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, caller_tid);
+            return -ENOTTY;
 
             /*
-            CreateFiber(): creates a new Fiber context,
-            assigns a separate stack, sets up the execution entry
-            point (associated to a function passed as argument to
-            the function)Fibers
-            */
-            printk(KERN_NOTICE "%s: 'CreateFiber()' Not Implemented yet\n", KBUILD_MODNAME);
+             *CreateFiber(): creates a new Fiber context,
+             *assigns a separate stack, sets up the execution entry
+             *point (associated to a function passed as argument to
+             *the function)
+             * */
+            
             break;
 
         case IOCTL_SWITCH:
