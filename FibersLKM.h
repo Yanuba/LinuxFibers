@@ -6,9 +6,6 @@
 #define FIBER_WAITING 0
 
 //struct used to expose information needed to use the module
-struct fiber_struct_usr {
-    int info; //Used just for a try
-};
 
 typedef pid_t fiber_id ;
 
@@ -16,9 +13,11 @@ typedef pid_t fiber_id ;
 
 //Fibers IOCTL
 
+//IOR return data to userland, IOW read data from userland
+
 #define IOCTL_CONVERT _IOR(IOCTL_MAGIC_NUM, 0, unsigned long /*Or type passed here*/) //ConvertThreadToFiber()
-#define IOCTL_CREATE _IOW(IOCTL_MAGIC_NUM, 1, unsigned long /*Or type passed here*/) //CreateFiber(...)
-#define IOCTL_SWITCH _IOW(IOCTL_MAGIC_NUM, 2, unsigned long /*Or type passed here*/) //SwitchToFiber(...)
+#define IOCTL_CREATE _IOWR(IOCTL_MAGIC_NUM, 1, unsigned long /*Or type passed here*/) //CreateFiber(...)
+#define IOCTL_SWITCH _IOWR(IOCTL_MAGIC_NUM, 2, unsigned long /*Or type passed here*/) //SwitchToFiber(...)
 
 //FLS IOCTL
 

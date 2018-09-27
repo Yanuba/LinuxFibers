@@ -14,6 +14,7 @@
 
 struct fiber_struct {
     pid_t fiber_id;
+    pid_t thread_on;        //last thread the fiber runs on
     struct hlist_node next; //must queue fibers
     
     //maybe we need only the pointer?
@@ -78,6 +79,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     pid_t caller_pid;
     pid_t caller_tid;
 
+    struct hlist_node* hlist_cursor;
     struct process_active *process_cursor;
     struct fiber_struct *fiber_cursor;
 
@@ -94,22 +96,35 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
              * Check whether the current thread is already a fiber
              * Allocate a new Fiber
              * Return data to userspace
+             * Cleanup in case of error
+             * Proc exposure
              */
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
             //can we return data to userspace?
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_id))) {   
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_id))) {
                 printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
+                return -EFAULT; //Is this correct?
             }
 
             hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
                 if (process_cursor->pid == caller_pid) {
                     printk(KERN_NOTICE "%s: Process %d is activated\n", KBUILD_MODNAME, caller_pid);
-                    //look for fiber (only active one are needed)
-                        //if fiber for current thread already exist return error
-                        //else allocate a new fiber context
+
+                    hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
+                        printk(KERN_NOTICE "%s: Loop0\n", KBUILD_MODNAME);
+                        fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
+                        printk(KERN_NOTICE "%s: Loop\n", KBUILD_MODNAME);
+                        if (fiber_cursor->parent_thread == caller_tid) {
+                            printk(KERN_NOTICE "%s: Thread %d is already a fiber\n", KBUILD_MODNAME, caller_tid);
+                            return -EEXIST; //Thread is already a fiber
+                        }                
+                    }
+                    goto allocate_fiber;
                 }
             }
+
+            printk(KERN_NOTICE "%s:  ConvertThreadToFiber() No active process found\n", KBUILD_MODNAME); 
 
             //create new struct process information
             process_cursor = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
@@ -124,11 +139,13 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             hash_add(process_table, &process_cursor->other, process_cursor->pid);
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info added to table\n", KBUILD_MODNAME, caller_tid);
 
+        allocate_fiber:
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: allocating new fiber\n", KBUILD_MODNAME, caller_tid);
             //allocate new fiber context
             fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
             fiber_cursor->fiber_id = process_cursor->num_fiber++;
             fiber_cursor->parent_process = process_cursor->pid;
-            fiber_cursor->parent_thread = caller_tid;
+            fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
             fiber_cursor->status = FIBER_RUNNING;
             /* 
              * We must save pt_regs and fpu_regs now? Maybe yes for saving the entrypoint (which is the entrypoint in this case?)
@@ -145,11 +162,12 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
             //return pid of newly created fiber.
             if (copy_to_user((void *) arg, (void *) &fiber_cursor->fiber_id, sizeof(fiber_id))) {
-                //cannot copy, must do something
-                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);    
+                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
+                //cannot copy, must do something?
+                //cleanup and return error 
             }
             
-
+            printk(KERN_NOTICE "%s:  ConvertThreadToFiber() was succesful, exiting...\n", KBUILD_MODNAME); 
             return 0;
             /*
             ConvertThreadToFiber(): creates a Fiber in the current thread. 
@@ -158,7 +176,8 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             break;
 
         case IOCTL_CREATE:
-            
+
+
             /*
             CreateFiber(): creates a new Fiber context,
             assigns a separate stack, sets up the execution entry
@@ -227,7 +246,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
         default:
             printk(KERN_NOTICE "%s: Default ioctl called\n", KBUILD_MODNAME);
-            return -ENOTTY;
+            return -ENOTTY; //return value is caught and errno set accordingly
             break;
     }
     return 0;

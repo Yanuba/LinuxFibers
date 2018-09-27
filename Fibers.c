@@ -7,10 +7,15 @@
 
 #include <pthread.h>
 
+#include <errno.h>
+
 #include "Fibers.h"
 
 /*
- *@TO_DO
+ * Must perform a better wrapping for the calls? We could lose errno value.
+ * Convert the current thread into a fiber.
+ * In case of success is returned an identifier for the new Fiber.
+ * In case of Failure NULL is returned.
  * */
 void *ConvertThreadToFiber() {
     int ret;
@@ -22,10 +27,14 @@ void *ConvertThreadToFiber() {
 
     fiber_id *id = (fiber_id *) malloc(sizeof(fiber_id)); 
 
+    printf("Entering");
     ret = ioctl(fd, IOCTL_CONVERT, id);
-    
-    //check ret value    
-    //probe do_exit to perform cleanup operations
+    printf("Returned");
+    if (ret) {
+        free(id);
+        id = NULL;
+        //debug stuff
+    }
 
     close(fd);
     return id;
@@ -35,6 +44,19 @@ void *ConvertThreadToFiber() {
  *@TO_DO
  * */
 void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
+    int ret;
+    int fd = open("/dev/FibersLKM", O_RDONLY);
+    if (fd == -1) {
+        perror("Error opening special device file");
+        return NULL;
+    }
+
+    create_args *arguments = (create_args*) malloc(sizeof(s_create_args));
+    //populate
+
+    ret = ioctl(fd, IOCTL_CREATE, creat_args);
+
+
     return NULL;
 }
 
@@ -92,6 +114,8 @@ void FlsSetValue(long index, void* value){
 void * thread_routine(void* arg) {
     fiber_id* fib = ConvertThreadToFiber();
     printf("My pid is %d, the fid get is: %d\n", getpid(), *fib);
+    fiber_id* fib2 = ConvertThreadToFiber();
+    //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
     return 0;
 }
 
@@ -102,12 +126,12 @@ int main() {
     pthread_t t3;
     
     pthread_create(&t1, NULL, thread_routine, NULL);
-    pthread_create(&t2, NULL, thread_routine, NULL);
-    pthread_create(&t3, NULL, thread_routine, NULL);
+    //pthread_create(&t2, NULL, thread_routine, NULL);
+    //pthread_create(&t3, NULL, thread_routine, NULL);
 
     pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
-    pthread_join(t3, NULL);
+    //pthread_join(t2, NULL);
+    //pthread_join(t3, NULL);
 
     //ConvertThreadToFiber();
 
