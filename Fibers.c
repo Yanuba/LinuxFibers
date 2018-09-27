@@ -27,13 +27,10 @@ void *ConvertThreadToFiber() {
 
     fiber_id *id = (fiber_id *) malloc(sizeof(fiber_id)); 
 
-    printf("Entering");
     ret = ioctl(fd, IOCTL_CONVERT, id);
-    printf("Returned");
     if (ret) {
-        free(id);
-        id = NULL;
-        //debug stuff
+        *id = -1;
+        //debug stuff TO DO
     }
 
     close(fd);
@@ -51,13 +48,38 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
         return NULL;
     }
 
+    fiber_id *id = (fiber_id *) malloc(sizeof(fiber_id)); 
+
     create_args *arguments = (create_args*) malloc(sizeof(s_create_args));
-    //populate
+    arguments->routine = routine;
+    arguments->routine_args = args;
+    
+    /* Stack allocation copied from ult*/
+    void *stack;
+	size_t reminder;
+	if (size <= 0) {
+		size = SIGSTKSZ;
+	}
 
-    ret = ioctl(fd, IOCTL_CREATE, creat_args);
+	// Align the size to the page boundary
+	reminder = stack_size % getpagesize();
+	if (reminder != 0) {
+		stack_size += getpagesize() - reminder;
+	}
 
+	posix_memalign(&stack, 16, 4096*2);
+	bzero(stack, stack_size);
 
-    return NULL;
+    arguments->stack_address = stack;;
+
+    ret = ioctl(fd, IOCTL_CREATE, arguments);
+    if (ret) *id = -1;    
+    else *id = arguments->ret;
+
+    //free(arguments);
+
+    close(fd)
+    return id;
 }
 
 /*

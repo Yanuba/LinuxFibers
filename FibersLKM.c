@@ -11,6 +11,7 @@
 #include <asm/fpu/internal.h>
 
 #include "FibersLKM.h"
+#include "Fibers.h"
 
 struct fiber_struct {
     pid_t fiber_id;
@@ -176,7 +177,10 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             break;
 
         case IOCTL_CREATE:
-
+            /* check whether the current thread is in a fiber context */
+            /* if don't return error */
+            /* if do allocate new fiber */
+            /* return fiber id*/
 
             /*
             CreateFiber(): creates a new Fiber context,

@@ -9,6 +9,15 @@
 
 typedef pid_t fiber_id ;
 
+struct s_create_args{
+    void* stack_address;
+    void* (*routine)(void *);
+    void* routine_args;
+    fiber_id ret;
+};
+
+
+
 #define IOCTL_MAGIC_NUM ']' //it is not used by any device driver (it should be safe)
 
 //Fibers IOCTL
