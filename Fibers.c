@@ -5,8 +5,8 @@
 #include <fcntl.h>
 #include <stropts.h>
 
+#include <string.h>
 #include <pthread.h>
-
 #include <errno.h>
 
 #include "Fibers.h"
@@ -50,15 +50,15 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
 
     fiber_id *id = (fiber_id *) malloc(sizeof(fiber_id)); 
 
-    create_args *arguments = (create_args*) malloc(sizeof(s_create_args));
+    struct s_create_args *arguments = (struct s_create_args*) malloc(sizeof(struct s_create_args));
     arguments->routine = routine;
     arguments->routine_args = args;
     
     /* Stack allocation copied from ult*/
     void *stack;
 	size_t reminder;
-	if (size <= 0) {
-		size = 8192;
+	if (stack_size <= 0) {
+		stack_size = 8192;
 	}
 
 	// Align the size to the page boundary
@@ -78,7 +78,7 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
 
     //free(arguments);
 
-    close(fd)
+    close(fd);
     return id;
 }
 

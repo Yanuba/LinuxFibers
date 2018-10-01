@@ -47,7 +47,8 @@ struct fiber_struct {
 
 /* 
  * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
- * Max pid on this system is 32768, 32767 require 15 bytes (which are crearly enough for not having collisions)
+ * Max pid on this system is 32768, if we exclude pid 0 we can have 32767 different pids,
+ * which require 15 bits (which are crearly enough for not having collisions)
  * */
 DEFINE_HASHTABLE(process_table, 15);
 
@@ -85,7 +86,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     struct fiber_struct *fiber_cursor;
 
     //maybe is not needed
-    struct fiber_struct_usr *idx_next; 
+    struct s_create_args *usr_args; 
 
     caller_pid = task_tgid_nr(current);
     caller_tid = task_pid_nr(current);
@@ -166,6 +167,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                 printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
                 //cannot copy, must do something?
                 //cleanup and return error 
+                return -ENOTTY; //?
             }
             
             printk(KERN_NOTICE "%s:  ConvertThreadToFiber() was succesful, exiting...\n", KBUILD_MODNAME); 
@@ -178,7 +180,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
         case IOCTL_CREATE:
 
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(s_create_args))) {
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct s_create_args))) {
                 printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
@@ -188,9 +190,41 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
                 if (process_cursor->pid == caller_pid) {
                     fiber_cursor = (struct fiber_struct *) kmalloc(GFP_KERNEL, sizeof(struct fiber_struct));
-                    //copy data from userland
+                    usr_args = (struct s_create_args *) kmalloc(GFP_KERNEL, sizeof(struct s_create_args));
+
+                    if (copy_from_user(usr_args , (void *) arg, sizeof(struct s_create_args))) {
+                        kfree(fiber_cursor);
+                        kfree(usr_args);
+                        return -ENOTTY; //?
+                    }
+
+                    fiber_cursor->fiber_id = usr_args->ret = process_cursor->num_fiber++;
+                    fiber_cursor->parent_process = caller_pid;
+                    fiber_cursor->parent_thread = caller_tid;
+                    fiber_cursor->entry_point = usr_args->routine;
+                    fiber_cursor->status = FIBER_WAITING;
+                    fiber_cursor->activations = fiber_cursor->failed_activations = 0;
                     //populate fiber struct
+                        //thread on
+                        //hlist_node
+                        //pt_regs and set registers for starting the routine and setting up the stack
+                        //fpu
+                        //execution time
+
+                    //put fiber struct in hashtable
                     //return fiber id
+                    if (copy_to_user((void *) arg, (void *) usr_args, sizeof(struct s_create_args))) {
+                        /* Something went wrong, 
+                         * Cannot return data to userspace
+                         * Cleanup and return error
+                         * */
+                        return -ENOTTY; //?
+                    }
+
+                    //we don't need this anymore
+                    kfree(usr_args);
+                    
+                    return 0;
                 }
             }
             
@@ -208,6 +242,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
         case IOCTL_SWITCH:
 
+            /*
             printk(KERN_NOTICE "%s: 'SwitchToFiber()' Does nothing yet\n", KBUILD_MODNAME);
             idx_next = kmalloc(sizeof(struct fiber_struct_usr),GFP_KERNEL);
             if (copy_from_user(idx_next, (void *) arg, sizeof(struct fiber_struct_usr))) { //help, if idx_next is deleted how we can do this?
@@ -216,6 +251,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             }
             printk(KERN_NOTICE "%s: Copyed input from userspace, %d\n", KBUILD_MODNAME, idx_next->info);   
             kfree(idx_next);
+            */
             //look for the fiber in the module memory
             //  If (found):
             //      Do the checks and eventually the context switch;
