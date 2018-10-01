@@ -76,7 +76,7 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
     if (ret) *id = -1;    
     else *id = arguments->ret;
 
-    //free(arguments);
+    free(arguments);
 
     close(fd);
     return id;
@@ -133,11 +133,20 @@ void FlsSetValue(long index, void* value){
  *  TEST PROGRAM    *
  ********************/
 
+void * thread_routine2(void* arg) {
+    unsigned long x = (unsigned long) arg;
+    printf("%lu", x);
+}
+
 void * thread_routine(void* arg) {
     fiber_id* fib = ConvertThreadToFiber();
     printf("My pid is %d, the fid get is: %d\n", getpid(), *fib);
     fiber_id* fib2 = ConvertThreadToFiber();
     //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
+    fib2 = CreateFiber(4096, thread_routine2, (void *) (unsigned long) 50);
+    printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
+    //fiber_id* fib3 = CreateFiber(4096, thread_routine2, (void *) (unsigned long) 50);
+    //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib3);
     return 0;
 }
 

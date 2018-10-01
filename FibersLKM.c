@@ -43,6 +43,8 @@ struct fiber_struct {
  * 
  * HOW TO CLEANUP? Probe do_exit?
  *
+ * we have to initialize hlist_node?
+ * 
  */
 
 /* 
@@ -87,6 +89,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
     //maybe is not needed
     struct s_create_args *usr_args; 
+    struct pt_regs * reg_cur;
 
     caller_pid = task_tgid_nr(current);
     caller_tid = task_pid_nr(current);
@@ -95,7 +98,6 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
         case IOCTL_CONVERT:
             /* 
              * @TO_DO
-             * Check whether the current thread is already a fiber
              * Allocate a new Fiber
              * Return data to userspace
              * Cleanup in case of error
@@ -114,9 +116,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                     printk(KERN_NOTICE "%s: Process %d is activated\n", KBUILD_MODNAME, caller_pid);
 
                     hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
-                        printk(KERN_NOTICE "%s: Loop0\n", KBUILD_MODNAME);
                         fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
-                        printk(KERN_NOTICE "%s: Loop\n", KBUILD_MODNAME);
                         if (fiber_cursor->parent_thread == caller_tid) {
                             printk(KERN_NOTICE "%s: Thread %d is already a fiber\n", KBUILD_MODNAME, caller_tid);
                             return -EEXIST; //Thread is already a fiber
@@ -148,16 +148,16 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             fiber_cursor->fiber_id = process_cursor->num_fiber++;
             fiber_cursor->parent_process = process_cursor->pid;
             fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
+            fiber_cursor->activations = 1;
+            fiber_cursor->failed_activations = 0;
             fiber_cursor->status = FIBER_RUNNING;
+            INIT_HLIST_NODE(&fiber_cursor->next);
             /* 
              * We must save pt_regs and fpu_regs now? Maybe yes for saving the entrypoint (which is the entrypoint in this case?)
              * Init other Fiber fields: 
-             * activations,
-             * failed activations,
              * execution time;
              * */
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new fiber context allocated, id is %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
-
 
             //add new fiber
             hlist_add_head(&fiber_cursor->next, &process_cursor->running_fibers);
@@ -171,12 +171,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             }
             
             printk(KERN_NOTICE "%s:  ConvertThreadToFiber() was succesful, exiting...\n", KBUILD_MODNAME); 
-            return 0;
-            /*
-             * ConvertThreadToFiber(): creates a Fiber in the current thread. 
-             *From now on, other Fibers can be created.
-             */       
-            break;
+            return 0;      
 
         case IOCTL_CREATE:
 
@@ -189,30 +184,41 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             
             hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
                 if (process_cursor->pid == caller_pid) {
-                    fiber_cursor = (struct fiber_struct *) kmalloc(GFP_KERNEL, sizeof(struct fiber_struct));
-                    usr_args = (struct s_create_args *) kmalloc(GFP_KERNEL, sizeof(struct s_create_args));
+                    
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, caller_tid);
+                    usr_args = (struct s_create_args *) kmalloc(sizeof(struct s_create_args), GFP_KERNEL);
 
-                    if (copy_from_user(usr_args , (void *) arg, sizeof(struct s_create_args))) {
-                        kfree(fiber_cursor);
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Copying args\n", KBUILD_MODNAME, caller_tid);
+                    if (copy_from_user((void *) usr_args, (void *) arg, sizeof(struct s_create_args))) {
+                        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
                         kfree(usr_args);
                         return -ENOTTY; //?
                     }
 
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Allocating Fiber\n", KBUILD_MODNAME, caller_tid);
+                    fiber_cursor = (struct fiber_struct *) kmalloc(sizeof(struct fiber_struct), GFP_KERNEL);
                     fiber_cursor->fiber_id = usr_args->ret = process_cursor->num_fiber++;
                     fiber_cursor->parent_process = caller_pid;
-                    fiber_cursor->parent_thread = caller_tid;
-                    fiber_cursor->entry_point = usr_args->routine;
+                    fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
                     fiber_cursor->status = FIBER_WAITING;
                     fiber_cursor->activations = fiber_cursor->failed_activations = 0;
-                    //populate fiber struct
-                        //thread on
-                        //hlist_node
-                        //pt_regs and set registers for starting the routine and setting up the stack
-                        //fpu
-                        //execution time
+                    fiber_cursor->entry_point = usr_args->routine;
+                    fiber_cursor->execution_time = 0;
+                    INIT_HLIST_NODE(&fiber_cursor->next);
 
-                    //put fiber struct in hashtable
-                    //return fiber id
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Setting up initial state\n", KBUILD_MODNAME, caller_tid);
+                    //registers status (maybe cannot do it in this way)
+                    reg_cur = &(fiber_cursor->regs);
+                    reg_cur->ip = (unsigned long) usr_args->routine;
+                    reg_cur->di = (unsigned long) usr_args->routine_args;
+                    reg_cur->sp = reg_cur->bp = (unsigned long) usr_args->stack_address; //end of stack?
+                    //populate fiber struct
+                    //thread on and fpu are don't care in this state.    
+
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Adding fiber to hashtable\n", KBUILD_MODNAME, caller_tid);
+                    hlist_add_head(&fiber_cursor->next, &process_cursor->waiting_fibers);
+
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
                     if (copy_to_user((void *) arg, (void *) usr_args, sizeof(struct s_create_args))) {
                         /* Something went wrong, 
                          * Cannot return data to userspace
@@ -220,10 +226,10 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                          * */
                         return -ENOTTY; //?
                     }
-
-                    //we don't need this anymore
-                    kfree(usr_args);
                     
+                    kfree(usr_args);//we don't need this anymore
+                    
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, caller_tid);
                     return 0;
                 }
             }
