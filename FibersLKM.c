@@ -165,8 +165,13 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             //return pid of newly created fiber.
             if (copy_to_user((void *) arg, (void *) &fiber_cursor->fiber_id, sizeof(fiber_id))) {
                 printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
-                //cannot copy, must do something?
-                //cleanup and return error 
+                /* 
+                 * cannot copy, must do something?
+                 * cleanup and return error 
+                 */
+                //Remove fiber from hashtable
+                //free fiber
+                //Process info can stay?
                 return -ENOTTY; //?
             }
             
@@ -174,6 +179,8 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             return 0;      
 
         case IOCTL_CREATE:
+
+            //push on stack return address?
 
             if (!access_ok(VERIFY_WRITE, arg, sizeof(struct s_create_args))) {
                 printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
@@ -224,6 +231,9 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                          * Cannot return data to userspace
                          * Cleanup and return error
                          * */
+                        //Remove fiber from hashlist
+                        //free args
+                        //free fiber_struct
                         return -ENOTTY; //?
                     }
                     
@@ -237,17 +247,18 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, caller_tid);
             return -ENOTTY;
 
-            /*
-             *CreateFiber(): creates a new Fiber context,
-             *assigns a separate stack, sets up the execution entry
-             *point (associated to a function passed as argument to
-             *the function)
-             * */
-            
-            break;
-
         case IOCTL_SWITCH:
-
+            /* 
+             * Verify that we can read from userspace
+             * Veryfy that we are a fiber and keep a reference on the fiber running on the top of the thread
+             * Read fiber id from user space
+             * Look for the other fiber in waiting fibers:
+             *      If is there do the switch
+             *          Return success 
+             * Look in active fibers:
+             *      If any update Fail
+             * Fail
+             * */
             /*
             printk(KERN_NOTICE "%s: 'SwitchToFiber()' Does nothing yet\n", KBUILD_MODNAME);
             idx_next = kmalloc(sizeof(struct fiber_struct_usr),GFP_KERNEL);
@@ -299,8 +310,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
         case IOCTL_SET:
             
             /*
-            FlsSetValue() : Sets a value associated with a FLS
-            index (a long)
+            FlsSetValue() : Sets a value associated with a FLS index (a long)
             */
             printk(KERN_NOTICE "%s: 'FlsSetValue()' Not Implemented yet\n", KBUILD_MODNAME);
             break;
@@ -378,6 +388,8 @@ static void __exit fibers_exit(void)
     class_destroy(device_class);
     unregister_chrdev(dev_major, KBUILD_MODNAME);
     
+    //destry the hash table?
+
     printk(KERN_NOTICE "%s: Module un-mounted\n", KBUILD_MODNAME);
 }
 
