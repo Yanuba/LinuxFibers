@@ -91,6 +91,9 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     struct s_create_args *usr_args; 
     struct pt_regs * reg_cur;
 
+    fiber_id *swtich_to_me_id;
+    struct fiber_struct *swtich_fiber_to;
+
     caller_pid = task_tgid_nr(current);
     caller_tid = task_pid_nr(current);
 
@@ -203,7 +206,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                     }
 
                     printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Allocating Fiber\n", KBUILD_MODNAME, caller_tid);
-                    fiber_cursor = (struct fiber_struct *) kmalloc(sizeof(struct fiber_struct), GFP_KERNEL);
+                    fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
                     fiber_cursor->fiber_id = usr_args->ret = process_cursor->num_fiber++;
                     fiber_cursor->parent_process = caller_pid;
                     fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
@@ -248,10 +251,68 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             return -ENOTTY;
 
         case IOCTL_SWITCH:
+
+            swtich_fiber_to = NULL;
+
+            if (!access_ok(VERIFY_READ, arg, sizeof(fiber_id))) {
+                printk(KERN_NOTICE "%s:  SwitchToFiber() cannot read data from userspace\n", KBUILD_MODNAME);
+                return -EFAULT; //Is this correct?
+            }
+
+            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            
+            switch_to_me_id = kmalloc(sizeof(fiber_id), GFP_KERNEL);
+
+            if (copy_from_user((void *) switch_to_me, (void *) arg, sizeof(fiber_id))) {
+                printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
+                kfree(switch_to_me);
+                return -ENOTTY; //?
+            }
+            
+
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
+                    hlist_for_each(hlist_cursor, &process_cursor->waiting_fibers) {
+                        fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
+                        if (fiber_cursor->fiber_id == *switch_to_me_id) {
+                            swtich_fiber_to = fiber_cursor;
+                        }
+                    }
+                }
+            }
+            
+            //if (swtich_fiber_to == NULL) something wrong happened, or the fiber is alredy running, or the fiber doesn't exist
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
+                    hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
+                        fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
+                        if (fiber_cursor->fiber_id == switch_to_me_id) {
+                            //switching to an active fiber return failure
+                        }
+                        if (fiber_cursor->thread_on == caller_tid) {
+                            //found fiber
+                            if (swtich_fiber_to != NULL) {
+                                //do the switch
+                            }
+                        } 
+                    }
+                }
+            }
+
+
+            //find switch from fiber, if not something is wrong
+            //  fails
+            //  if switch to running fails
+            //DO THE SWOTCH
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
+                    //find running fiber
+                    //if none return failure;
+                }
+            }
+
             /* 
-             * Verify that we can read from userspace
              * Veryfy that we are a fiber and keep a reference on the fiber running on the top of the thread
-             * Read fiber id from user space
              * Look for the other fiber in waiting fibers:
              *      If is there do the switch
              *          Return success 
@@ -280,7 +341,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             (in the caller thread) to a different Fiber (it can fail if
             switching to a Fiber which is already active)
             */   
-            break;
+            return -ENOTTY;
 
         case IOCTL_ALLOC:
             
