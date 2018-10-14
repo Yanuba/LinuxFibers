@@ -20,7 +20,7 @@ struct fiber_struct {
     
     //maybe we need only the pointer?
     struct pt_regs regs; //regs = task_pt_regs(current); (where regs is of type struct pt_regs*)  
-    struct fpu fpu_regs; //fpu__save(struct fpu *) and fpu__restore(struct fpu *)?
+    struct fpu fpu_regs; //fpu__save(struct fpu *) and fpu__restore(struct fpu *)? //why not fpu_save with an fpu_state_struct?
 
     /* Fields to be exposed in proc */
     short   status;                 //The fiber is running or not?
@@ -219,6 +219,11 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                     printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Setting up initial state\n", KBUILD_MODNAME, caller_tid);
                     //registers status (maybe cannot do it in this way)
                     reg_cur = &(fiber_cursor->regs);
+                    
+                    //fiber is somehow a copy of the parent process
+                    //just to be sure that the register are correctly populated
+                    (void) memcpy(reg_cur, task_pt_regs(current), sizeof(struct pt_regs));
+                    
                     reg_cur->ip = (unsigned long) usr_args->routine;
                     reg_cur->di = (unsigned long) usr_args->routine_args;
                     reg_cur->sp = reg_cur->bp = (unsigned long) usr_args->stack_address; //end of stack?
@@ -261,11 +266,11 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
             printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
-            switch_to_me_id = kmalloc(sizeof(fiber_id), GFP_KERNEL);
+            swtich_to_me_id = kmalloc(sizeof(fiber_id), GFP_KERNEL);
 
-            if (copy_from_user((void *) switch_to_me, (void *) arg, sizeof(fiber_id))) {
-                printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
-                kfree(switch_to_me);
+            if (copy_from_user((void *) swtich_to_me_id, (void *) arg, sizeof(fiber_id))) {
+                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
+                kfree(swtich_to_me_id);
                 return -ENOTTY; //?
             }
             
@@ -274,67 +279,45 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                 if (process_cursor->pid == caller_pid) {
                     hlist_for_each(hlist_cursor, &process_cursor->waiting_fibers) {
                         fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
-                        if (fiber_cursor->fiber_id == *switch_to_me_id) {
+                        if (fiber_cursor->fiber_id == *swtich_to_me_id) {
+                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, found fiber to switch TO\n", KBUILD_MODNAME, caller_tid);
                             swtich_fiber_to = fiber_cursor;
                         }
                     }
-                }
-            }
-            
-            //if (swtich_fiber_to == NULL) something wrong happened, or the fiber is alredy running, or the fiber doesn't exist
-            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
-                if (process_cursor->pid == caller_pid) {
+                    //MAYBE WE HAVE FOUND THE FIBER WE WANT TO SEITCH TO
+
                     hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
                         fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
-                        if (fiber_cursor->fiber_id == switch_to_me_id) {
-                            //switching to an active fiber return failure
+                        if (fiber_cursor->fiber_id == *swtich_to_me_id) {
+                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, caller_tid);
+                            fiber_cursor->failed_activations += 1;
+                            return -ENOTTY;
                         }
-                        if (fiber_cursor->thread_on == caller_tid) {
+                        else if (fiber_cursor->thread_on == caller_tid) {
                             //found fiber
                             if (swtich_fiber_to != NULL) {
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching\n", KBUILD_MODNAME, caller_tid);
+                                preempt_disable();
                                 //do the switch
+                                //save_cpu
+                                fpu__save(&(fiber_cursor->fpu_regs));
+                                (void) memcpy(&(fiber_cursor->regs), task_pt_regs(current), sizeof(struct pt_regs));
+                                
+                                //restore_cpu
+                                (void) memcpy(task_pt_regs(current), &(swtich_fiber_to->regs),sizeof(struct pt_regs));
+                                fpu__restore(&(swtich_fiber_to->fpu_regs)); //must be here or before?
+                                preempt_enable();
+                                
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Finished\n", KBUILD_MODNAME, caller_tid);
+                                //increase stats
+                                //STATUS? 
+                                return 0;
                             }
                         } 
                     }
+
                 }
             }
-
-
-            //find switch from fiber, if not something is wrong
-            //  fails
-            //  if switch to running fails
-            //DO THE SWOTCH
-            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
-                if (process_cursor->pid == caller_pid) {
-                    //find running fiber
-                    //if none return failure;
-                }
-            }
-
-            /* 
-             * Veryfy that we are a fiber and keep a reference on the fiber running on the top of the thread
-             * Look for the other fiber in waiting fibers:
-             *      If is there do the switch
-             *          Return success 
-             * Look in active fibers:
-             *      If any update Fail
-             * Fail
-             * */
-            /*
-            printk(KERN_NOTICE "%s: 'SwitchToFiber()' Does nothing yet\n", KBUILD_MODNAME);
-            idx_next = kmalloc(sizeof(struct fiber_struct_usr),GFP_KERNEL);
-            if (copy_from_user(idx_next, (void *) arg, sizeof(struct fiber_struct_usr))) { //help, if idx_next is deleted how we can do this?
-                //cannot copy, must do something
-                printk(KERN_NOTICE "%s: Cannot take input from userspace\n", KBUILD_MODNAME);    
-            }
-            printk(KERN_NOTICE "%s: Copyed input from userspace, %d\n", KBUILD_MODNAME, idx_next->info);   
-            kfree(idx_next);
-            */
-            //look for the fiber in the module memory
-            //  If (found):
-            //      Do the checks and eventually the context switch;
-            //  else:
-            //      Do nothing
             
             /*
             SwitchToFiber(): switches the execution context
@@ -449,7 +432,7 @@ static void __exit fibers_exit(void)
     class_destroy(device_class);
     unregister_chrdev(dev_major, KBUILD_MODNAME);
     
-    //destry the hash table?
+    //destroy the hash table?
 
     printk(KERN_NOTICE "%s: Module un-mounted\n", KBUILD_MODNAME);
 }
