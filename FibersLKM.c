@@ -32,21 +32,6 @@ struct fiber_struct {
     long    execution_time;         //total execution time in that Fiber context
 };
 
-/*
- * Only a fiber can switch to another fiber. 
- * If we want to use switchTo, we must use ConvertThreadTofiber in the current thread.
- * Fibers are shared across the process, a Fiber can switch to a fiber created in another thread.
- * 
- * We can keep a list of threads relying on fibers, and a list of active fibers within a process. (See notes for details.)
- * 
- * How to keep the info about the fiber running in the current thread?
- * 
- * HOW TO CLEANUP? Probe do_exit?
- *
- * we have to initialize hlist_node?
- * 
- */
-
 /* 
  * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
  * Max pid on this system is 32768, if we exclude pid 0 we can have 32767 different pids,
@@ -320,11 +305,8 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                                 hlist_del(&swtich_fiber_to->next);
                                 hlist_del(&fiber_cursor->next);
 
-
-                                //maybe we leave lists in an inconsistent state
                                 hlist_add_head(&swtich_fiber_to->next, &process_cursor->running_fibers);
                                 hlist_add_head(&fiber_cursor->next, &process_cursor->waiting_fibers);
-                                //change position in lists
                                 printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Updated status\n", KBUILD_MODNAME, caller_tid);
 
                                 return 0;
