@@ -1,14 +1,36 @@
 #include <linux/module.h>
-#include <linux/kernel.h>
 #include <linux/device.h>
-#include <linux/fs.h> //for file system operations
+#include <linux/uaccess.h>
+#include <linux/slab.h>
 
-/* 
+#include <linux/hashtable.h>
+
+//for pt regs and fpu
 #include <linux/ptrace.h>
-#include <linux/sched/task_stack.h> //this makes me feel really bad :(
-#include <linux/processor.h>
-*/
+#include <linux/sched/task_stack.h>
+#include <asm/fpu/internal.h>
+
 #include "FibersLKM.h"
+#include "Fibers.h"
+
+struct fiber_struct {
+    pid_t fiber_id;
+    pid_t thread_on;        //last thread the fiber runs on
+    struct hlist_node next; //must queue fibers
+    
+    //maybe we need only the pointer?
+    struct pt_regs regs; //regs = task_pt_regs(current); (where regs is of type struct pt_regs*)  
+    struct fpu fpu_regs; //fpu__save(struct fpu *) and fpu__restore(struct fpu *)? //why not fpu_save with an fpu_state_struct?
+
+    /* Fields to be exposed in proc */
+    short   status;                 //The fiber is running or not?
+    void*   (*entry_point)(void*);  //entry point of the fiber (EIP)
+    pid_t   parent_process;         //key in the hash table
+    pid_t   parent_thread;          //pid of the thread that created the fiber
+    int     activations;            //the number of current activations of the Fiber
+    int     failed_activations;     //the number of failed activations
+    long    execution_time;         //total execution time in that Fiber context
+};
 
 /*
  * Only a fiber can switch to another fiber. 
@@ -19,7 +41,28 @@
  * 
  * How to keep the info about the fiber running in the current thread?
  * 
+ * HOW TO CLEANUP? Probe do_exit?
+ *
+ * we have to initialize hlist_node?
+ * 
  */
+
+/* 
+ * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
+ * Max pid on this system is 32768, if we exclude pid 0 we can have 32767 different pids,
+ * which require 15 bits (which are crearly enough for not having collisions)
+ * */
+DEFINE_HASHTABLE(process_table, 15);
+
+struct process_active {
+    pid_t pid;                          //process id
+    pid_t num_fiber;                    //will be next fiber id                        
+    struct hlist_head running_fibers;   //running fibers of the process
+    struct hlist_head waiting_fibers;   //waiting fibers of the process
+    struct hlist_node other;            //other process in the bucket
+};
+
+/* ******************************************************************* */
 
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
 
@@ -33,99 +76,309 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
-/* Here we store only the status of one 'Fiber' */
-//struct pt_regs *regs = NULL;
-/* For context switch thry using thread_struct or tss_struct
- * Download Quaglia slides, it may conta9in useful info for this project
- */
+/* ******************************************************************* */
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
-{
-    switch(cmd) {
-        case IOCTL_EX:
-            printk(KERN_NOTICE "%s: Pid is %d\n", KBUILD_MODNAME, current->pid);
-            
-            /* WIll this work? */
-            //regs = task_pt_regs(current);   
-            /*
-            {          
-            printk(KERN_NOTICE "%s: r15 is %ld\n", KBUILD_MODNAME, regs->r15);
-            printk(KERN_NOTICE "%s: r14 is %ld\n", KBUILD_MODNAME, regs->r14);
-            printk(KERN_NOTICE "%s: r13 is %ld\n", KBUILD_MODNAME, regs->r13);
-            printk(KERN_NOTICE "%s: r12 is %ld\n", KBUILD_MODNAME, regs->r12);
-            printk(KERN_NOTICE "%s: rbp is %ld\n", KBUILD_MODNAME, regs->bp);
-            printk(KERN_NOTICE "%s: rbx is %ld\n", KBUILD_MODNAME, regs->bx);
-            printk(KERN_NOTICE "%s: r11 is %ld\n", KBUILD_MODNAME, regs->r11);
-            printk(KERN_NOTICE "%s: r10 is %ld\n", KBUILD_MODNAME, regs->r10);
-            printk(KERN_NOTICE "%s: r9  is %ld\n", KBUILD_MODNAME, regs->r9);
-            printk(KERN_NOTICE "%s: r8  is %ld\n", KBUILD_MODNAME, regs->r8);
-            printk(KERN_NOTICE "%s: rax is %ld\n", KBUILD_MODNAME, regs->ax);
-            printk(KERN_NOTICE "%s: rcx is %ld\n", KBUILD_MODNAME, regs->cx);
-            printk(KERN_NOTICE "%s: rdx is %ld\n", KBUILD_MODNAME, regs->dx);
-            printk(KERN_NOTICE "%s: rsi is %ld\n", KBUILD_MODNAME, regs->si);
-            printk(KERN_NOTICE "%s: rdi is %ld\n", KBUILD_MODNAME, regs->di);
-            printk(KERN_NOTICE "%s: o_rax is %ld\n", KBUILD_MODNAME, regs->orig_ax);
-            printk(KERN_NOTICE "%s: rip is %ld\n", KBUILD_MODNAME, regs->ip);
-            printk(KERN_NOTICE "%s: cs  is %ld\n", KBUILD_MODNAME, regs->cs);
-            printk(KERN_NOTICE "%s: eflags is %ld\n", KBUILD_MODNAME, regs->flags);
-            printk(KERN_NOTICE "%s: rsp is %ld\n", KBUILD_MODNAME, regs->sp);
-            printk(KERN_NOTICE "%s: ss  is %ld\n", KBUILD_MODNAME, regs->ss);
-            printk(KERN_NOTICE "%s: Please don't puke \n", KBUILD_MODNAME);
-            }
-            */
-            break;
+{   
+    pid_t caller_pid;
+    pid_t caller_tid;
+
+    struct hlist_node* hlist_cursor;
+    struct process_active *process_cursor;
+    struct fiber_struct *fiber_cursor;
+
+    //maybe is not needed
+    struct s_create_args *usr_args; 
+    struct pt_regs * reg_cur;
+
+    fiber_id *swtich_to_me_id;
+    struct fiber_struct *swtich_fiber_to;
+
+    caller_pid = task_tgid_nr(current);
+    caller_tid = task_pid_nr(current);
+
+    switch(cmd) {        
         case IOCTL_CONVERT:
-            /*
-            ConvertThreadToFiber(): creates a Fiber in the current thread. 
-            From now on, other Fibers can be created.
-            */       
-            printk(KERN_NOTICE "%s: 'ConvertThreadToFiber()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
+            /* 
+             * @TO_DO
+             * Allocate a new Fiber
+             * Return data to userspace
+             * Cleanup in case of error
+             * Proc exposure
+             */
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            
+            //can we return data to userspace?
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_id))) {
+                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
+                return -EFAULT; //Is this correct?
+            }
+
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
+                    printk(KERN_NOTICE "%s: Process %d is activated\n", KBUILD_MODNAME, caller_pid);
+
+                    hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
+                        fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
+                        if (fiber_cursor->parent_thread == caller_tid) {
+                            printk(KERN_NOTICE "%s: Thread %d is already a fiber\n", KBUILD_MODNAME, caller_tid);
+                            return -EEXIST; //Thread is already a fiber
+                        }                
+                    }
+                    goto allocate_fiber;
+                }
+            }
+
+            printk(KERN_NOTICE "%s:  ConvertThreadToFiber() No active process found\n", KBUILD_MODNAME); 
+
+            //create new struct process information
+            process_cursor = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
+            process_cursor->pid = caller_pid;
+            process_cursor->num_fiber = 1;       
+            INIT_HLIST_HEAD(&process_cursor->running_fibers);
+            INIT_HLIST_HEAD(&process_cursor->waiting_fibers);
+            INIT_HLIST_NODE(&process_cursor->other);
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info allocated\n", KBUILD_MODNAME, caller_tid);
+
+            //add process information to hash table
+            hash_add(process_table, &process_cursor->other, process_cursor->pid);
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info added to table\n", KBUILD_MODNAME, caller_tid);
+
+        allocate_fiber:
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: allocating new fiber\n", KBUILD_MODNAME, caller_tid);
+            //allocate new fiber context
+            fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
+            fiber_cursor->fiber_id = process_cursor->num_fiber++;
+            fiber_cursor->parent_process = process_cursor->pid;
+            fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
+            fiber_cursor->activations = 1;
+            fiber_cursor->failed_activations = 0;
+            fiber_cursor->status = FIBER_RUNNING;
+            INIT_HLIST_NODE(&fiber_cursor->next);
+            /* 
+             * We must save pt_regs and fpu_regs now? Maybe yes for saving the entrypoint (which is the entrypoint in this case?)
+             * Init other Fiber fields: 
+             * execution time;
+             * */
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new fiber context allocated, id is %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
+
+            //add new fiber
+            hlist_add_head(&fiber_cursor->next, &process_cursor->running_fibers);
+
+            //return pid of newly created fiber.
+            if (copy_to_user((void *) arg, (void *) &fiber_cursor->fiber_id, sizeof(fiber_id))) {
+                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
+                /* 
+                 * cannot copy, must do something?
+                 * cleanup and return error 
+                 */
+                //Remove fiber from hashtable
+                //free fiber
+                //Process info can stay?
+                return -ENOTTY; //?
+            }
+            
+            printk(KERN_NOTICE "%s:  ConvertThreadToFiber() was succesful, exiting...\n", KBUILD_MODNAME); 
+            return 0;      
+
         case IOCTL_CREATE:
-            /*
-            CreateFiber(): creates a new Fiber context,
-            assigns a separate stack, sets up the execution entry
-            point (associated to a function passed as argument to
-            the function)Fibers
-            */
-            printk(KERN_NOTICE "%s: 'CreateFiber()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
+
+            //push on stack return address?
+
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct s_create_args))) {
+                printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
+                return -EFAULT; //Is this correct?
+            }
+
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
+                    
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, caller_tid);
+                    usr_args = (struct s_create_args *) kmalloc(sizeof(struct s_create_args), GFP_KERNEL);
+
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Copying args\n", KBUILD_MODNAME, caller_tid);
+                    if (copy_from_user((void *) usr_args, (void *) arg, sizeof(struct s_create_args))) {
+                        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
+                        kfree(usr_args);
+                        return -ENOTTY; //?
+                    }
+
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Allocating Fiber\n", KBUILD_MODNAME, caller_tid);
+                    fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
+                    fiber_cursor->fiber_id = usr_args->ret = process_cursor->num_fiber++;
+                    fiber_cursor->parent_process = caller_pid;
+                    fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
+                    fiber_cursor->status = FIBER_WAITING;
+                    fiber_cursor->activations = fiber_cursor->failed_activations = 0;
+                    fiber_cursor->entry_point = usr_args->routine;
+                    fiber_cursor->execution_time = 0;
+                    INIT_HLIST_NODE(&fiber_cursor->next);
+
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Setting up initial state\n", KBUILD_MODNAME, caller_tid);
+                    //registers status (maybe cannot do it in this way)
+                    reg_cur = &(fiber_cursor->regs);
+                    
+                    //fiber is somehow a copy of the parent process
+                    //just to be sure that the register are correctly populated
+                    (void) memcpy(reg_cur, task_pt_regs(current), sizeof(struct pt_regs));
+                    
+                    reg_cur->ip = (unsigned long) usr_args->routine;
+                    reg_cur->di = (unsigned long) usr_args->routine_args;
+                    reg_cur->sp = reg_cur->bp = (unsigned long) usr_args->stack_address; //end of stack?
+                    //populate fiber struct
+                    //thread on and fpu are don't care in this state.    
+
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Adding fiber to hashtable\n", KBUILD_MODNAME, caller_tid);
+                    hlist_add_head(&fiber_cursor->next, &process_cursor->waiting_fibers);
+
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
+                    if (copy_to_user((void *) arg, (void *) usr_args, sizeof(struct s_create_args))) {
+                        /* Something went wrong, 
+                         * Cannot return data to userspace
+                         * Cleanup and return error
+                         * */
+                        //Remove fiber from hashlist
+                        //free args
+                        //free fiber_struct
+                        return -ENOTTY; //?
+                    }
+                    
+                    kfree(usr_args);//we don't need this anymore
+                    
+                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, caller_tid);
+                    return 0;
+                }
+            }
+            
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, caller_tid);
+            return -ENOTTY;
+
         case IOCTL_SWITCH:
-            printk(KERN_NOTICE "%s: 'SwitchToFiber()' Not Implemented yet\n", KBUILD_MODNAME);
+
+            swtich_fiber_to = NULL;
+
+            if (!access_ok(VERIFY_READ, arg, sizeof(fiber_id))) {
+                printk(KERN_NOTICE "%s:  SwitchToFiber() cannot read data from userspace\n", KBUILD_MODNAME);
+                return -EFAULT; //Is this correct?
+            }
+
+            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            
+            swtich_to_me_id = kmalloc(sizeof(fiber_id), GFP_KERNEL);
+
+            if (copy_from_user((void *) swtich_to_me_id, (void *) arg, sizeof(fiber_id))) {
+                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
+                kfree(swtich_to_me_id);
+                return -ENOTTY; //?
+            }
+            
+
+            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+                if (process_cursor->pid == caller_pid) {
+                    hlist_for_each(hlist_cursor, &process_cursor->waiting_fibers) {
+                        fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
+                        if (fiber_cursor->fiber_id == *swtich_to_me_id) {
+                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, found fiber to switch TO\n", KBUILD_MODNAME, caller_tid);
+                            swtich_fiber_to = fiber_cursor;
+                        }
+                    }
+                    //MAYBE WE HAVE FOUND THE FIBER WE WANT TO SEITCH TO
+
+                    hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
+                        fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
+                        if (fiber_cursor->fiber_id == *swtich_to_me_id) {
+                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, caller_tid);
+                            fiber_cursor->failed_activations += 1;
+                            return -ENOTTY;
+                        }
+                        else if (fiber_cursor->thread_on == caller_tid) {
+                            //found fiber
+                            if (swtich_fiber_to != NULL) {
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching\n", KBUILD_MODNAME, caller_tid);
+
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching to %d\n", KBUILD_MODNAME, caller_tid, swtich_fiber_to->fiber_id);
+
+                                preempt_disable();
+                                //do the switch
+                                //save_cpu
+                                fpu__save(&(fiber_cursor->fpu_regs));
+                                (void) memcpy(&(fiber_cursor->regs), task_pt_regs(current), sizeof(struct pt_regs));
+                                
+                                //restore_cpu
+                                (void) memcpy(task_pt_regs(current), &(swtich_fiber_to->regs),sizeof(struct pt_regs));
+                                fpu__restore(&(swtich_fiber_to->fpu_regs)); //must be here or before?
+                                preempt_enable();
+                                
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Finished\n", KBUILD_MODNAME, caller_tid);
+                                //increase stats
+                                swtich_fiber_to->activations += 1;
+                                swtich_fiber_to->status = FIBER_RUNNING;
+                                fiber_cursor->status = FIBER_WAITING;
+                                hlist_del(&swtich_fiber_to->next);
+                                hlist_del(&fiber_cursor->next);
+
+
+                                //maybe we leave lists in an inconsistent state
+                                hlist_add_head(&swtich_fiber_to->next, &process_cursor->running_fibers);
+                                hlist_add_head(&fiber_cursor->next, &process_cursor->waiting_fibers);
+                                //change position in lists
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Updated status\n", KBUILD_MODNAME, caller_tid);
+
+                                return 0;
+                            }
+                        } 
+                    }
+
+                }
+            }
+            
             /*
             SwitchToFiber(): switches the execution context
             (in the caller thread) to a different Fiber (it can fail if
             switching to a Fiber which is already active)
             */   
-           break;
+            return -ENOTTY;
+
         case IOCTL_ALLOC:
+            
             /*
             FlsAlloc() : Allocates a FLS index
             */ 
             printk(KERN_NOTICE "%s: 'FlsAlloc()' Not Implemented yet\n", KBUILD_MODNAME);
             break;
+
         case IOCTL_FREE: 
-             /*
+            
+            /*
             FlsFree() : Frees a FLS index
             */
             printk(KERN_NOTICE "%s: 'FlsFree()' Not Implemented yet\n", KBUILD_MODNAME);
             break;
+
         case IOCTL_GET: 
+            
             /*
             FlsGetValue() : Gets the value associated with a FLS
             index (a long)
             */
             printk(KERN_NOTICE "%s: 'FlsGetValue()' Not Implemented yet\n", KBUILD_MODNAME);
             break;
+
         case IOCTL_SET:
+            
             /*
-            FlsSetValue() : Sets a value associated with a FLS
-            index (a long)
+            FlsSetValue() : Sets a value associated with a FLS index (a long)
             */
             printk(KERN_NOTICE "%s: 'FlsSetValue()' Not Implemented yet\n", KBUILD_MODNAME);
             break;
+
         default:
             printk(KERN_NOTICE "%s: Default ioctl called\n", KBUILD_MODNAME);
+            return -ENOTTY; //return value is caught and errno set accordingly
+            break;
     }
     return 0;
 }
@@ -144,6 +397,8 @@ static char *fiber_devnode(struct device *dev, umode_t *mode)
 static int __init fibers_init(void) 
 {   
     int ret;
+
+    /* Device allocation code */
 
     //Allocate a major number
     dev_major = register_chrdev(0, KBUILD_MODNAME, &fops);
@@ -172,6 +427,9 @@ static int __init fibers_init(void)
     }
 
     printk(KERN_NOTICE "%s: Module mounted, device registered with major %d \n", KBUILD_MODNAME, dev_major);
+
+    hash_init(process_table); 
+
     return 0;
 
     fail_devcreate:
@@ -190,6 +448,8 @@ static void __exit fibers_exit(void)
     class_destroy(device_class);
     unregister_chrdev(dev_major, KBUILD_MODNAME);
     
+    //destroy the hash table?
+
     printk(KERN_NOTICE "%s: Module un-mounted\n", KBUILD_MODNAME);
 }
 
