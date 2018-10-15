@@ -297,6 +297,10 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                             //found fiber
                             if (swtich_fiber_to != NULL) {
                                 printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching\n", KBUILD_MODNAME, caller_tid);
+
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching to %d\n", KBUILD_MODNAME, caller_tid, swtich_fiber_to->fiber_id);
+
                                 preempt_disable();
                                 //do the switch
                                 //save_cpu
@@ -310,7 +314,19 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                                 
                                 printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Finished\n", KBUILD_MODNAME, caller_tid);
                                 //increase stats
-                                //STATUS? 
+                                swtich_fiber_to->activations += 1;
+                                swtich_fiber_to->status = FIBER_RUNNING;
+                                fiber_cursor->status = FIBER_WAITING;
+                                hlist_del(&swtich_fiber_to->next);
+                                hlist_del(&fiber_cursor->next);
+
+
+                                //maybe we leave lists in an inconsistent state
+                                hlist_add_head(&swtich_fiber_to->next, &process_cursor->running_fibers);
+                                hlist_add_head(&fiber_cursor->next, &process_cursor->waiting_fibers);
+                                //change position in lists
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Updated status\n", KBUILD_MODNAME, caller_tid);
+
                                 return 0;
                             }
                         } 
