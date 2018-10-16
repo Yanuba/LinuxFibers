@@ -71,7 +71,7 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg, struct tas
             printk(KERN_NOTICE "%s:ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
             hlist_for_each(cursor, &process->running_fibers) {
                 fiber = hlist_entry(cursor, struct fiber_struct, next);
-                if (fiber->parent_thread == tgid) {
+                if (fiber->parent_thread == pid) {
                     printk(KERN_NOTICE "%s:ConvertThreadToFiber() Thread %d is alrady a fiber\n", KBUILD_MODNAME, tgid);
                     return -ENOTTY; //
                 }
@@ -92,7 +92,7 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg, struct tas
     printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info allocated\n", KBUILD_MODNAME, pid);
 
 ALLOCATE_FIBER:
-    fiber = allocate_fiber(process->next_fid, p, NULL, NULL, NULL);
+    fiber = allocate_fiber(process->next_fid++, p, NULL, NULL, NULL);
     hlist_add_head(&(fiber->next), &(process->running_fibers));
   
     if (copy_to_user((void *) arg, (void *) &fiber->fiber_id,sizeof(fiber_t))) {
@@ -161,8 +161,8 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args, 
 }
 
 long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, struct task_struct *p) {
-    struct fiber_struct     *prev;
-    struct fiber_struct     *next;
+    struct fiber_struct     *switch_prev;
+    struct fiber_struct     *switch_next;
     struct fiber_struct     *cursor;
 
     struct process_active   *process;
@@ -173,14 +173,14 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, str
     pid_t tgid; 
     pid_t pid;
     
-    prev = NULL;
-    next = NULL;
+    switch_prev = NULL;
+    switch_next = NULL;
     tgid = task_tgid_nr(p);
     pid = task_pid_nr(p);
 
     printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
 
-    id_next = kmalloc(sizeof(fiber_t), GFP_KERNEL);
+    id_next = (fiber_t *) kmalloc(sizeof(fiber_t), GFP_KERNEL);
 
     if (copy_from_user((void *) id_next, (void *) usr_id_next, sizeof(fiber_t))) {
         printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d Cannot copy input data\n", KBUILD_MODNAME, pid);
@@ -188,44 +188,52 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, str
         return -EFAULT;
     }
 
+    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, requested: %d\n", KBUILD_MODNAME, pid, *id_next);
+
     hash_for_each_possible(hashtable->htable, process, next, tgid) {
         if (process->tgid == tgid) {
             hlist_for_each(list_cursor, &process->waiting_fibers) {
                 cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+                
+                printk(KERN_NOTICE "%s: SwitchToFiber() WAITING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
+                
                 if (cursor->fiber_id == *id_next) {
-                    next = cursor;
+                    switch_next = cursor;
                 }
             }
         
             hlist_for_each(list_cursor, &process->running_fibers) {
                 cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+
+                printk(KERN_NOTICE "%s: SwitchToFiber() RUNNING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
+
                 if (cursor->fiber_id == *id_next) {
                     printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, pid);
                     cursor->failed_activations += 1;
                     return -ENOTTY;
                 }
                 else if (cursor->thread_on == pid) {
-                    prev = cursor;
-                    if (next != NULL) {
+                    switch_prev = cursor;
+                    if (switch_next != NULL) {
                         //do context switch
                         preempt_disable();
-                        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, prev->fiber_id, next->fiber_id);                               
-                        fpu__save(&(prev->fpu_regs));
-                        (void) memcpy(&(prev->regs),    task_pt_regs(p),    sizeof(struct pt_regs));
-                        (void) memcpy(task_pt_regs(p),  &(next->regs),      sizeof(struct pt_regs));                              
-                        fpu__restore(&(next->fpu_regs));
-
-                        next->activations += 1;
-                        next->status = FIBER_RUNNING;
-                        prev->status = FIBER_WAITING;
-
-                        hlist_del(&next->next);
-                        hlist_del(&prev->next);
-                        hlist_add_head(&next->next, &process->running_fibers);
-                        hlist_add_head(&prev->next, &process->waiting_fibers);
-
+                        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
+                        fpu__save(&(switch_prev->fpu_regs));
+                        (void) memcpy(&(switch_prev->regs), task_pt_regs(p), sizeof(struct pt_regs));
+                        (void) memcpy(task_pt_regs(p), &(switch_next->regs), sizeof(struct pt_regs));                              
+                        fpu__restore(&(switch_next->fpu_regs));
                         preempt_enable();
 
+                        switch_next->activations += 1;
+                        switch_next->status = FIBER_RUNNING;
+                        switch_prev->status = FIBER_WAITING;
+
+                        hlist_del(&(switch_next->next));
+                        hlist_del(&(switch_prev->next));
+
+                        hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
+                        hlist_add_head(&(switch_next->next), &(process->running_fibers));
+                        
                         return 0;
 
                     }

@@ -159,7 +159,7 @@ void * thread_routine2(void* arg) {
 
     SwitchToFiber(fib);
 
-    while(1) {printf("%f, %lu\n", l3, x);};
+    //while(1) {printf("%f, %lu\n", l3, x);};
 
 }
 
