@@ -159,3 +159,82 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args, 
     return -ENOTTY;
 
 }
+
+long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, struct task_struct *p) {
+    struct fiber_struct     *prev;
+    struct fiber_struct     *next;
+    struct fiber_struct     *cursor;
+
+    struct process_active   *process;
+    struct hlist_node       *list_cursor;
+
+    fiber_t                 *id_next;
+
+    pid_t tgid; 
+    pid_t pid;
+    
+    prev = NULL;
+    next = NULL;
+    tgid = task_tgid_nr(p);
+    pid = task_pid_nr(p);
+
+    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
+
+    id_next = kmalloc(sizeof(fiber_t), GFP_KERNEL);
+
+    if (copy_from_user((void *) id_next, (void *) usr_id_next, sizeof(fiber_t))) {
+        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d Cannot copy input data\n", KBUILD_MODNAME, pid);
+        kfree(id_next);
+        return -EFAULT;
+    }
+
+    hash_for_each_possible(hashtable->htable, process, next, tgid) {
+        if (process->tgid == tgid) {
+            hlist_for_each(list_cursor, &process->waiting_fibers) {
+                cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+                if (cursor->fiber_id == *id_next) {
+                    next = cursor;
+                }
+            }
+        
+            hlist_for_each(list_cursor, &process->running_fibers) {
+                cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+                if (cursor->fiber_id == *id_next) {
+                    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, pid);
+                    cursor->failed_activations += 1;
+                    return -ENOTTY;
+                }
+                else if (cursor->thread_on == pid) {
+                    prev = cursor;
+                    if (next != NULL) {
+                        //do context switch
+                        preempt_disable();
+                        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, prev->fiber_id, next->fiber_id);                               
+                        fpu__save(&(prev->fpu_regs));
+                        (void) memcpy(&(prev->regs),    task_pt_regs(p),    sizeof(struct pt_regs));
+                        (void) memcpy(task_pt_regs(p),  &(next->regs),      sizeof(struct pt_regs));                              
+                        fpu__restore(&(next->fpu_regs));
+
+                        next->activations += 1;
+                        next->status = FIBER_RUNNING;
+                        prev->status = FIBER_WAITING;
+
+                        hlist_del(&next->next);
+                        hlist_del(&prev->next);
+                        hlist_add_head(&next->next, &process->running_fibers);
+                        hlist_add_head(&prev->next, &process->waiting_fibers);
+
+                        preempt_enable();
+
+                        return 0;
+
+                    }
+                }
+            }
+        }
+    }
+
+    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Failed, since not running in fiber context\n", KBUILD_MODNAME, pid);
+    return -ENOTTY;
+
+}
