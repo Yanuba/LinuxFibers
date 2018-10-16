@@ -1,7 +1,6 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/uaccess.h>
-#include <linux/slab.h>
 
 #include <linux/hashtable.h>
 
@@ -30,43 +29,29 @@ static struct file_operations fops = {
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
-    pid_t caller_pid;
-    pid_t caller_tid;
-
-    struct hlist_node* hlist_cursor;
-    struct process_active *process_cursor;
-    struct fiber_struct *fiber_cursor;
-
-    //maybe is not needed
-    struct s_create_args *usr_args; 
-    struct pt_regs * reg_cur;
-
-    fiber_t *swtich_to_me_id;
-    struct fiber_struct *swtich_fiber_to;
-
-    caller_pid = task_tgid_nr(current);
-    caller_tid = task_pid_nr(current);
+    struct task_struct *caller;
+    caller = current;
 
     switch(cmd) {        
         case IOCTL_CONVERT:
-            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
             
             if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_t))) {
                 printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
 
-            return _ioctl_convert(&process_table, (fiber_t *) arg, current);
+            return _ioctl_convert(&process_table, (fiber_t *) arg, caller);
 
         case IOCTL_CREATE:
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
 
             if (!access_ok(VERIFY_WRITE, arg, sizeof(struct fiber_args))) {
                 printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
 
-            return _ioctl_create(&process_table, (struct fiber_args*) arg, current);
+            return _ioctl_create(&process_table, (struct fiber_args*) arg, caller);
 
         case IOCTL_SWITCH:
 
@@ -78,23 +63,23 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                 return -EFAULT; //Is this correct?
             }
 
-            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
+            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
             
             swtich_to_me_id = kmalloc(sizeof(fiber_t), GFP_KERNEL);
 
             if (copy_from_user((void *) swtich_to_me_id, (void *) arg, sizeof(fiber_t))) {
-                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
+                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, task_pid_nr(caller));
                 kfree(swtich_to_me_id);
                 return -ENOTTY; //?
             }
             
 
-            hash_for_each_possible(process_table.htable, process_cursor, other, caller_pid) {
-                if (process_cursor->pid == caller_pid) {
+            hash_for_each_possible(process_table.htable, process_cursor, other, task_tgid_nr(caller)) {
+                if (process_cursor->task_pid_nr(caller) == task_tgid_nr(caller)) {
                     hlist_for_each(hlist_cursor, &process_cursor->waiting_fibers) {
                         fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
                         if (fiber_cursor->fiber_id == *swtich_to_me_id) {
-                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, found fiber to switch TO\n", KBUILD_MODNAME, caller_tid);
+                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, found fiber to switch TO\n", KBUILD_MODNAME, task_pid_nr(caller));
                             swtich_fiber_to = fiber_cursor;
                         }
                     }
@@ -103,17 +88,17 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                     hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
                         fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
                         if (fiber_cursor->fiber_id == *swtich_to_me_id) {
-                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, caller_tid);
+                            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, task_pid_nr(caller));
                             fiber_cursor->failed_activations += 1;
                             return -ENOTTY;
                         }
-                        else if (fiber_cursor->thread_on == caller_tid) {
+                        else if (fiber_cursor->thread_on == task_pid_nr(caller)) {
                             //found fiber
                             if (swtich_fiber_to != NULL) {
-                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching\n", KBUILD_MODNAME, caller_tid);
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching\n", KBUILD_MODNAME, task_pid_nr(caller));
 
-                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
-                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching to %d\n", KBUILD_MODNAME, caller_tid, swtich_fiber_to->fiber_id);
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d\n", KBUILD_MODNAME, task_pid_nr(caller), fiber_cursor->fiber_id);
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching to %d\n", KBUILD_MODNAME, task_pid_nr(caller), swtich_fiber_to->fiber_id);
 
                                 preempt_disable();
                                 //do the switch
@@ -126,7 +111,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                                 fpu__restore(&(swtich_fiber_to->fpu_regs)); //must be here or before?
                                 preempt_enable();
                                 
-                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Finished\n", KBUILD_MODNAME, caller_tid);
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Finished\n", KBUILD_MODNAME, task_pid_nr(caller));
                                 //increase stats
                                 swtich_fiber_to->activations += 1;
                                 swtich_fiber_to->status = FIBER_RUNNING;
@@ -136,7 +121,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
                                 hlist_add_head(&swtich_fiber_to->next, &process_cursor->running_fibers);
                                 hlist_add_head(&fiber_cursor->next, &process_cursor->waiting_fibers);
-                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Updated status\n", KBUILD_MODNAME, caller_tid);
+                                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Updated status\n", KBUILD_MODNAME, task_pid_nr(caller));
 
                                 return 0;
                             }
