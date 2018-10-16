@@ -1,5 +1,5 @@
-obj-m := FibersLKM.o
-#FibersLKM-objs := .o that are used by FibersLKM.o
+obj-m := FibersModule.o
+FibersModule-objs := FibersLKM.o Fibers_kioctls.o
 PWD := $(shell pwd)
 CC = gcc -Wall
 

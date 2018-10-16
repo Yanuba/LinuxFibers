@@ -10,44 +10,11 @@
 #include <linux/sched/task_stack.h>
 #include <asm/fpu/internal.h>
 
-#include "FibersLKM.h"
-#include "Fibers.h"
+#include "Fibers_ktypes.h"
+#include "Fibers_ioctls.h"
+#include "Fibers_kioctls.h"
 
-struct fiber_struct {
-    pid_t fiber_id;
-    pid_t thread_on;        //last thread the fiber runs on
-    struct hlist_node next; //must queue fibers
-    
-    //maybe we need only the pointer?
-    struct pt_regs regs; //regs = task_pt_regs(current); (where regs is of type struct pt_regs*)  
-    struct fpu fpu_regs; //fpu__save(struct fpu *) and fpu__restore(struct fpu *)? //why not fpu_save with an fpu_state_struct?
-
-    /* Fields to be exposed in proc */
-    short   status;                 //The fiber is running or not?
-    void*   (*entry_point)(void*);  //entry point of the fiber (EIP)
-    pid_t   parent_process;         //key in the hash table
-    pid_t   parent_thread;          //pid of the thread that created the fiber
-    int     activations;            //the number of current activations of the Fiber
-    int     failed_activations;     //the number of failed activations
-    long    execution_time;         //total execution time in that Fiber context
-};
-
-/* 
- * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
- * Max pid on this system is 32768, if we exclude pid 0 we can have 32767 different pids,
- * which require 15 bits (which are crearly enough for not having collisions)
- * */
-DEFINE_HASHTABLE(process_table, 15);
-
-struct process_active {
-    pid_t pid;                          //process id
-    pid_t num_fiber;                    //will be next fiber id                        
-    struct hlist_head running_fibers;   //running fibers of the process
-    struct hlist_head waiting_fibers;   //waiting fibers of the process
-    struct hlist_node other;            //other process in the bucket
-};
-
-/* ******************************************************************* */
+struct module_hashtable process_table;
 
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
 
@@ -60,8 +27,6 @@ static struct file_operations fops = {
     .unlocked_ioctl = fibers_ioctl,
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
-
-/* ******************************************************************* */
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
@@ -76,7 +41,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     struct s_create_args *usr_args; 
     struct pt_regs * reg_cur;
 
-    fiber_id *swtich_to_me_id;
+    fiber_t *swtich_to_me_id;
     struct fiber_struct *swtich_fiber_to;
 
     caller_pid = task_tgid_nr(current);
@@ -94,82 +59,17 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
             //can we return data to userspace?
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_id))) {
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_t))) {
                 printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
 
-            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
-                if (process_cursor->pid == caller_pid) {
-                    printk(KERN_NOTICE "%s: Process %d is activated\n", KBUILD_MODNAME, caller_pid);
-
-                    hlist_for_each(hlist_cursor, &process_cursor->running_fibers) {
-                        fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
-                        if (fiber_cursor->parent_thread == caller_tid) {
-                            printk(KERN_NOTICE "%s: Thread %d is already a fiber\n", KBUILD_MODNAME, caller_tid);
-                            return -EEXIST; //Thread is already a fiber
-                        }                
-                    }
-                    goto allocate_fiber;
-                }
-            }
-
-            printk(KERN_NOTICE "%s:  ConvertThreadToFiber() No active process found\n", KBUILD_MODNAME); 
-
-            //create new struct process information
-            process_cursor = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
-            process_cursor->pid = caller_pid;
-            process_cursor->num_fiber = 1;       
-            INIT_HLIST_HEAD(&process_cursor->running_fibers);
-            INIT_HLIST_HEAD(&process_cursor->waiting_fibers);
-            INIT_HLIST_NODE(&process_cursor->other);
-            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info allocated\n", KBUILD_MODNAME, caller_tid);
-
-            //add process information to hash table
-            hash_add(process_table, &process_cursor->other, process_cursor->pid);
-            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info added to table\n", KBUILD_MODNAME, caller_tid);
-
-        allocate_fiber:
-            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: allocating new fiber\n", KBUILD_MODNAME, caller_tid);
-            //allocate new fiber context
-            fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
-            fiber_cursor->fiber_id = process_cursor->num_fiber++;
-            fiber_cursor->parent_process = process_cursor->pid;
-            fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
-            fiber_cursor->activations = 1;
-            fiber_cursor->failed_activations = 0;
-            fiber_cursor->status = FIBER_RUNNING;
-            INIT_HLIST_NODE(&fiber_cursor->next);
-            /* 
-             * We must save pt_regs and fpu_regs now? Maybe yes for saving the entrypoint (which is the entrypoint in this case?)
-             * Init other Fiber fields: 
-             * execution time;
-             * */
-            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new fiber context allocated, id is %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
-
-            //add new fiber
-            hlist_add_head(&fiber_cursor->next, &process_cursor->running_fibers);
-
-            //return pid of newly created fiber.
-            if (copy_to_user((void *) arg, (void *) &fiber_cursor->fiber_id, sizeof(fiber_id))) {
-                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
-                /* 
-                 * cannot copy, must do something?
-                 * cleanup and return error 
-                 */
-                //Remove fiber from hashtable
-                //free fiber
-                //Process info can stay?
-                return -ENOTTY; //?
-            }
-            
-            printk(KERN_NOTICE "%s:  ConvertThreadToFiber() was succesful, exiting...\n", KBUILD_MODNAME); 
-            return 0;      
+            return _ioctl_convert(&process_table, (fiber_t *) arg, current);
 
         case IOCTL_CREATE:
 
             //push on stack return address?
-
+/*
             if (!access_ok(VERIFY_WRITE, arg, sizeof(struct s_create_args))) {
                 printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
@@ -177,8 +77,8 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
             printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
-            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
-                if (process_cursor->pid == caller_pid) {
+            hash_for_each_possible(process_table.htable, process_cursor, next, caller_pid) {
+                if (process_cursor->tgid == caller_pid) {
                     
                     printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, caller_tid);
                     usr_args = (struct s_create_args *) kmalloc(sizeof(struct s_create_args), GFP_KERNEL);
@@ -227,7 +127,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                         //Remove fiber from hashlist
                         //free args
                         //free fiber_struct
-                        return -ENOTTY; //?
+/*                        return -ENOTTY; //?
                     }
                     
                     kfree(usr_args);//we don't need this anymore
@@ -236,31 +136,32 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                     return 0;
                 }
             }
-            
+*/            
             printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, caller_tid);
             return -ENOTTY;
 
         case IOCTL_SWITCH:
 
+/*
             swtich_fiber_to = NULL;
 
-            if (!access_ok(VERIFY_READ, arg, sizeof(fiber_id))) {
+            if (!access_ok(VERIFY_READ, arg, sizeof(fiber_t))) {
                 printk(KERN_NOTICE "%s:  SwitchToFiber() cannot read data from userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
 
             printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
-            swtich_to_me_id = kmalloc(sizeof(fiber_id), GFP_KERNEL);
+            swtich_to_me_id = kmalloc(sizeof(fiber_t), GFP_KERNEL);
 
-            if (copy_from_user((void *) swtich_to_me_id, (void *) arg, sizeof(fiber_id))) {
+            if (copy_from_user((void *) swtich_to_me_id, (void *) arg, sizeof(fiber_t))) {
                 printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
                 kfree(swtich_to_me_id);
                 return -ENOTTY; //?
             }
             
 
-            hash_for_each_possible(process_table, process_cursor, other, caller_pid) {
+            hash_for_each_possible(process_table.htable, process_cursor, other, caller_pid) {
                 if (process_cursor->pid == caller_pid) {
                     hlist_for_each(hlist_cursor, &process_cursor->waiting_fibers) {
                         fiber_cursor = hlist_entry(hlist_cursor, struct fiber_struct, next);
@@ -410,7 +311,7 @@ static int __init fibers_init(void)
 
     printk(KERN_NOTICE "%s: Module mounted, device registered with major %d \n", KBUILD_MODNAME, dev_major);
 
-    hash_init(process_table); 
+    hash_init(process_table.htable); 
 
     return 0;
 
@@ -429,9 +330,6 @@ static void __exit fibers_exit(void)
     class_unregister(device_class);
     class_destroy(device_class);
     unregister_chrdev(dev_major, KBUILD_MODNAME);
-    
-    //destroy the hash table?
-
     printk(KERN_NOTICE "%s: Module un-mounted\n", KBUILD_MODNAME);
 }
 

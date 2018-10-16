@@ -1,4 +1,5 @@
-#include "FibersLKM.h"
+#include "Fibers_utypes.h"
+#include "Fibers_ioctls.h"
 
 void *ConvertThreadToFiber(void);
 void *CreateFiber(size_t stack_size, void* (*routine)(void *), void *args);

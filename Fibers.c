@@ -10,7 +10,7 @@
 #include <errno.h>
 
 #include "Fibers.h"
-
+#include "Fibers_ioctls.h"
 /*
  * Must perform a better wrapping for the calls? We could lose errno value.
  * Convert the current thread into a fiber.
@@ -19,13 +19,13 @@
  * */
 void *ConvertThreadToFiber() {
     int ret;
-    int fd = open("/dev/FibersLKM", O_RDONLY);
+    int fd = open("/dev/FibersModule", O_RDONLY);
     if (fd == -1) {
         perror("Error opening special device file");
         return NULL;
     }
 
-    fiber_id *id = (fiber_id *) malloc(sizeof(fiber_id)); 
+    fiber_t *id = (fiber_t *) malloc(sizeof(fiber_t)); 
 
     ret = ioctl(fd, IOCTL_CONVERT, id);
     if (ret) {
@@ -42,13 +42,13 @@ void *ConvertThreadToFiber() {
  * */
 void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
     int ret;
-    int fd = open("/dev/FibersLKM", O_RDONLY);
+    int fd = open("/dev/FibersModule", O_RDONLY);
     if (fd == -1) {
         perror("Error opening special device file");
         return NULL;
     }
 
-    fiber_id *id = (fiber_id *) malloc(sizeof(fiber_id)); 
+    fiber_t *id = (fiber_t *) malloc(sizeof(fiber_t)); 
 
     struct s_create_args *arguments = (struct s_create_args*) malloc(sizeof(struct s_create_args));
     arguments->routine = routine;
@@ -87,7 +87,7 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
  * */
 void SwitchToFiber(void* fiber) {
     int ret;
-    int fd = open("/dev/FibersLKM", O_RDONLY);
+    int fd = open("/dev/FibersModule", O_RDONLY);
     if (fd == -1) {
         perror("Error opening special device file");
         return;
@@ -133,7 +133,7 @@ void FlsSetValue(long index, void* value){
 /******************** 
  *  TEST PROGRAM    *
  ********************/
-fiber_id* fib;
+fiber_t* fib;
 
 void * thread_routine2(void* arg) {
     printf("FIIIIIIIIIIIIIBER\n");
@@ -166,7 +166,7 @@ void * thread_routine2(void* arg) {
 void * thread_routine(void* arg) {
     fib = ConvertThreadToFiber();
     printf("My pid is %d, the fid get is: %d\n", getpid(), *fib);
-    fiber_id* fib2 = ConvertThreadToFiber();
+    fiber_t* fib2 = ConvertThreadToFiber();
     //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
     fib2 = CreateFiber(2*4096, thread_routine2, (void *) (unsigned long) 50);
     printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
