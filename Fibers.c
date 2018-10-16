@@ -50,7 +50,7 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
 
     fiber_t *id = (fiber_t *) malloc(sizeof(fiber_t)); 
 
-    struct s_create_args *arguments = (struct s_create_args*) malloc(sizeof(struct s_create_args));
+    struct fiber_args *arguments = (struct fiber_args*) malloc(sizeof(struct fiber_args));
     arguments->routine = routine;
     arguments->routine_args = args;
     

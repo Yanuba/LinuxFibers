@@ -3,7 +3,7 @@
 
 typedef pid_t fiber_t;
 
-struct s_create_args{
+struct fiber_args{
     void* stack_address;
     void* (*routine)(void *);
     void* routine_args;

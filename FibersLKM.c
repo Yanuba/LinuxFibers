@@ -49,16 +49,8 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
     switch(cmd) {        
         case IOCTL_CONVERT:
-            /* 
-             * @TO_DO
-             * Allocate a new Fiber
-             * Return data to userspace
-             * Cleanup in case of error
-             * Proc exposure
-             */
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
             
-            //can we return data to userspace?
             if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_t))) {
                 printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
@@ -67,78 +59,14 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             return _ioctl_convert(&process_table, (fiber_t *) arg, current);
 
         case IOCTL_CREATE:
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
 
-            //push on stack return address?
-/*
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct s_create_args))) {
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct fiber_args))) {
                 printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
 
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, caller_tid, caller_pid);
-            
-            hash_for_each_possible(process_table.htable, process_cursor, next, caller_pid) {
-                if (process_cursor->tgid == caller_pid) {
-                    
-                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, caller_tid);
-                    usr_args = (struct s_create_args *) kmalloc(sizeof(struct s_create_args), GFP_KERNEL);
-
-                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Copying args\n", KBUILD_MODNAME, caller_tid);
-                    if (copy_from_user((void *) usr_args, (void *) arg, sizeof(struct s_create_args))) {
-                        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, caller_tid);
-                        kfree(usr_args);
-                        return -ENOTTY; //?
-                    }
-
-                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Allocating Fiber\n", KBUILD_MODNAME, caller_tid);
-                    fiber_cursor = (struct fiber_struct *) kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
-                    fiber_cursor->fiber_id = usr_args->ret = process_cursor->num_fiber++;
-                    fiber_cursor->parent_process = caller_pid;
-                    fiber_cursor->parent_thread = fiber_cursor->thread_on = caller_tid;
-                    fiber_cursor->status = FIBER_WAITING;
-                    fiber_cursor->activations = fiber_cursor->failed_activations = 0;
-                    fiber_cursor->entry_point = usr_args->routine;
-                    fiber_cursor->execution_time = 0;
-                    INIT_HLIST_NODE(&fiber_cursor->next);
-
-                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Setting up initial state\n", KBUILD_MODNAME, caller_tid);
-                    //registers status (maybe cannot do it in this way)
-                    reg_cur = &(fiber_cursor->regs);
-                    
-                    //fiber is somehow a copy of the parent process
-                    //just to be sure that the register are correctly populated
-                    (void) memcpy(reg_cur, task_pt_regs(current), sizeof(struct pt_regs));
-                    
-                    reg_cur->ip = (unsigned long) usr_args->routine;
-                    reg_cur->di = (unsigned long) usr_args->routine_args;
-                    reg_cur->sp = reg_cur->bp = (unsigned long) usr_args->stack_address; //end of stack?
-                    //populate fiber struct
-                    //thread on and fpu are don't care in this state.    
-
-                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Adding fiber to hashtable\n", KBUILD_MODNAME, caller_tid);
-                    hlist_add_head(&fiber_cursor->next, &process_cursor->waiting_fibers);
-
-                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, caller_tid, fiber_cursor->fiber_id);
-                    if (copy_to_user((void *) arg, (void *) usr_args, sizeof(struct s_create_args))) {
-                        /* Something went wrong, 
-                         * Cannot return data to userspace
-                         * Cleanup and return error
-                         * */
-                        //Remove fiber from hashlist
-                        //free args
-                        //free fiber_struct
-/*                        return -ENOTTY; //?
-                    }
-                    
-                    kfree(usr_args);//we don't need this anymore
-                    
-                    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, caller_tid);
-                    return 0;
-                }
-            }
-*/            
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, caller_tid);
-            return -ENOTTY;
+            return _ioctl_create(&process_table, (struct fiber_args*) arg, current);
 
         case IOCTL_SWITCH:
 
