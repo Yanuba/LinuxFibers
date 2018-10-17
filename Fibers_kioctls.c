@@ -8,6 +8,13 @@
 
 #include "Fibers_kioctls.h"
 
+/*
+ * To save fpu state try with:
+ * copy_fxregs_to_kernel(sstruct fpu *fpu)
+ * To restore fpu state use: 
+ * copy_kernel_to_fxregs(struct fxregs_state *fx)
+ * */
+
 struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void* (entry_point)(void*), void* args, void* stack_base) {
         struct fiber_struct* fiber;
 
