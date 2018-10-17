@@ -29,7 +29,7 @@ struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void*
         INIT_HLIST_NODE(&fiber->next);
 
         (void) memcpy(&(fiber->regs), task_pt_regs(p), sizeof(struct pt_regs));
-        fpu__save(&(fiber->fpu_regs));
+        copy_fxregs_to_kernel(&(fiber->fpu_regs));
 
         //fiber created by CreateFiber()
         if (entry_point != NULL) {
@@ -225,10 +225,10 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, str
                         //do context switch
                         preempt_disable();
                         printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
-                        fpu__save(&(switch_prev->fpu_regs));
+                        copy_fxregs_to_kernel(&(switch_prev->fpu_regs));
                         (void) memcpy(&(switch_prev->regs), task_pt_regs(p), sizeof(struct pt_regs));
-                        (void) memcpy(task_pt_regs(p), &(switch_next->regs), sizeof(struct pt_regs));                              
-                        fpu__restore(&(switch_next->fpu_regs));
+                        (void) memcpy(task_pt_regs(p), &(switch_next->regs), sizeof(struct pt_regs));
+                        copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave));
                         preempt_enable();
 
                         switch_next->activations += 1;
