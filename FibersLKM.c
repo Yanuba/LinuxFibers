@@ -4,11 +4,6 @@
 
 #include <linux/hashtable.h>
 
-//for pt regs and fpu
-#include <linux/ptrace.h>
-#include <linux/sched/task_stack.h>
-#include <asm/fpu/internal.h>
-
 #include "Fibers_ktypes.h"
 #include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"

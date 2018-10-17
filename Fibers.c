@@ -9,31 +9,43 @@
 #include <pthread.h>
 #include <errno.h>
 
+#include<stdbool.h>
+
 #include "Fibers.h"
 #include "Fibers_ioctls.h"
+
+int _FIBER_DESCRIPTOR = -1;
+bool _DESCRIPTOR_GUARD = false;
+
+
 /*
  * Must perform a better wrapping for the calls? We could lose errno value.
  * Convert the current thread into a fiber.
  * In case of success is returned an identifier for the new Fiber.
- * In case of Failure NULL is returned.
+ * In case of Failure a non valid fiber_t is returned, all calls will fail.
  * */
 void *ConvertThreadToFiber() {
-    int ret;
-    int fd = open("/dev/FibersModule", O_RDONLY);
-    if (fd == -1) {
-        perror("Error opening special device file");
-        return NULL;
+    
+    int     ret;
+    fiber_t *id;
+    
+    id = (fiber_t *) malloc(sizeof(fiber_t)); 
+
+    if (_DESCRIPTOR_GUARD == false) {
+        int _FIBER_DESCRIPTOR = open("/dev/FibersModule", O_RDONLY);
+        if (_FIBER_DESCRIPTOR == -1) {
+            perror("Error opening special device file");
+            *id = -1;
+            return id;
+        }
+        else _DESCRIPTOR_GUARD = true;
     }
-
-    fiber_t *id = (fiber_t *) malloc(sizeof(fiber_t)); 
-
-    ret = ioctl(fd, IOCTL_CONVERT, id);
+    
+    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_CONVERT, id);
     if (ret) {
         *id = -1;
-        //debug stuff TO DO
     }
 
-    close(fd);
     return id;
 }
 
@@ -41,16 +53,13 @@ void *ConvertThreadToFiber() {
  *@TO_DO
  * */
 void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
-    int ret;
-    int fd = open("/dev/FibersModule", O_RDONLY);
-    if (fd == -1) {
-        perror("Error opening special device file");
-        return NULL;
-    }
+    int                 ret;
+    fiber_t             *id;
+    struct fiber_args   *arguments;
+    
+    id = (fiber_t *) malloc(sizeof(fiber_t)); 
 
-    fiber_t *id = (fiber_t *) malloc(sizeof(fiber_t)); 
-
-    struct fiber_args *arguments = (struct fiber_args*) malloc(sizeof(struct fiber_args));
+    arguments = (struct fiber_args*) malloc(sizeof(struct fiber_args));
     arguments->routine = routine;
     arguments->routine_args = args;
     
@@ -72,13 +81,11 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
 
     arguments->stack_address = stack+stack_size-8; //-8 since stack expect a return address
 
-    ret = ioctl(fd, IOCTL_CREATE, arguments);
+    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_CREATE, arguments);
     if (ret) *id = -1;    
     else *id = arguments->ret;
 
     free(arguments);
-
-    close(fd);
     return id;
 }
 
@@ -87,17 +94,10 @@ void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) {
  * */
 void SwitchToFiber(void* fiber) {
     int ret;
-    int fd = open("/dev/FibersModule", O_RDONLY);
-    if (fd == -1) {
-        perror("Error opening special device file");
-        return;
-    }
 
-    ret = ioctl(fd, IOCTL_SWITCH, fiber);
+    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_SWITCH, fiber);
     
     //check ret value
-    
-    close(fd);
     return;
 }
 
