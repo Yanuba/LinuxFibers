@@ -36,7 +36,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                 return -EFAULT; //Is this correct?
             }
 
-            return _ioctl_convert(&process_table, (fiber_t *) arg, caller);
+            return _ioctl_convert(&process_table, (fiber_t *) arg);
 
         case IOCTL_CREATE:
             printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
@@ -46,7 +46,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                 return -EFAULT; //Is this correct?
             }
 
-            return _ioctl_create(&process_table, (struct fiber_args*) arg, caller);
+            return _ioctl_create(&process_table, (struct fiber_args*) arg);
 
         case IOCTL_SWITCH:
             if (!access_ok(VERIFY_READ, arg, sizeof(fiber_t))) {
@@ -54,7 +54,7 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
                 return -EFAULT; //Is this correct?
             }
 
-            return _ioctl_switch(&process_table, (fiber_t *) arg, caller);
+            return _ioctl_switch(&process_table, (fiber_t *) arg);
 
         case IOCTL_ALLOC:
             

@@ -56,15 +56,15 @@ ERRORS
  *  ConvertTreadtoFiber()
  * */
 
-long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg, struct task_struct* p){    
+long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg){    
     struct process_active   *process;
     struct fiber_struct     *fiber;
     struct hlist_node       *cursor;
     pid_t tgid; 
     pid_t pid;
     
-    tgid = task_tgid_nr(p);
-    pid = task_pid_nr(p);
+    tgid = task_tgid_nr(current);
+    pid = task_pid_nr(current);
 
     hash_for_each_possible(hashtable->htable, process, next, tgid) {
         if (process->tgid == tgid) { //Needed in case of collision
@@ -92,7 +92,7 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg, struct tas
     printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info allocated\n", KBUILD_MODNAME, pid);
 
 ALLOCATE_FIBER:
-    fiber = allocate_fiber(process->next_fid++, p, NULL, NULL, NULL);
+    fiber = allocate_fiber(process->next_fid++, current, NULL, NULL, NULL);
     hlist_add_head(&(fiber->next), &(process->running_fibers));
   
     if (copy_to_user((void *) arg, (void *) &fiber->fiber_id,sizeof(fiber_t))) {
@@ -111,7 +111,7 @@ ALLOCATE_FIBER:
  *  CreateFiber()
  * */
 
-long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args, struct task_struct *p){
+long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args){
     struct process_active   *process;
     struct fiber_struct     *fiber;
 
@@ -120,8 +120,8 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args, 
     pid_t tgid; 
     pid_t pid;
     
-    tgid = task_tgid_nr(p);
-    pid = task_pid_nr(p);
+    tgid = task_tgid_nr(current);
+    pid = task_pid_nr(current);
 
     hash_for_each_possible(hashtable->htable, process, next, tgid) {
         if (process->tgid == tgid) {
@@ -134,7 +134,7 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args, 
                 return -EFAULT;
             }
         
-            fiber = allocate_fiber(process->next_fid++, p, usr_buf->routine, usr_buf->routine_args, usr_buf->stack_address);
+            fiber = allocate_fiber(process->next_fid++, current, usr_buf->routine, usr_buf->routine_args, usr_buf->stack_address);
             hlist_add_head(&fiber->next, &process->waiting_fibers);
 
             usr_buf->ret = fiber->fiber_id;
@@ -160,7 +160,7 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args, 
 
 }
 
-long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, struct task_struct *p) {
+long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next) {
     struct fiber_struct     *switch_prev;
     struct fiber_struct     *switch_next;
     struct fiber_struct     *cursor;
@@ -175,8 +175,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, str
     
     switch_prev = NULL;
     switch_next = NULL;
-    tgid = task_tgid_nr(p);
-    pid = task_pid_nr(p);
+    tgid = task_tgid_nr(current);
+    pid = task_pid_nr(current);
 
     printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
 
@@ -219,8 +219,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, str
                         preempt_disable();
                         printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
                         fpu__save(&(switch_prev->fpu_regs));
-                        (void) memcpy(&(switch_prev->regs), task_pt_regs(p), sizeof(struct pt_regs));
-                        (void) memcpy(task_pt_regs(p), &(switch_next->regs), sizeof(struct pt_regs));                              
+                        (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
+                        (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));                              
                         fpu__restore(&(switch_next->fpu_regs));
                         preempt_enable();
 

@@ -3,8 +3,13 @@
 
 #include "Fibers_ktypes.h"
 
-long _ioctl_convert(struct module_hashtable *hashtable, fiber_t *arg, struct task_struct *p);
-long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args, struct task_struct *p);
-long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next, struct task_struct *p);
+long _ioctl_convert(struct module_hashtable *hashtable, fiber_t *arg);
+long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args);
+long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next);
+
+//long _ioctl_alloc();
+//long _ioctl_free();
+//long _ioctl_get();
+//long _ioctl_set();
 
 #endif /* !FKIOCTLS_H */

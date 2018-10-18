@@ -17,12 +17,10 @@
 int _FIBER_DESCRIPTOR = -1;
 bool _DESCRIPTOR_GUARD = false;
 
-
 /*
- * Must perform a better wrapping for the calls? We could lose errno value.
  * Convert the current thread into a fiber.
  * In case of success is returned an identifier for the new Fiber.
- * In case of Failure a non valid fiber_t is returned, all calls will fail.
+ * In case of Failure a non valid fiber identifier is returned, all calls will fail.
  * */
 void *ConvertThreadToFiber() {
     
@@ -32,9 +30,8 @@ void *ConvertThreadToFiber() {
     id = (fiber_t *) malloc(sizeof(fiber_t)); 
 
     if (_DESCRIPTOR_GUARD == false) {
-        int _FIBER_DESCRIPTOR = open("/dev/FibersModule", O_RDONLY);
+        _FIBER_DESCRIPTOR = open("/dev/FibersModule", O_RDONLY);
         if (_FIBER_DESCRIPTOR == -1) {
-            perror("Error opening special device file");
             *id = -1;
             return id;
         }
@@ -167,7 +164,7 @@ void * thread_routine(void* arg) {
     fib = ConvertThreadToFiber();
     printf("My pid is %d, the fid get is: %d\n", getpid(), *fib);
     fiber_t* fib2 = ConvertThreadToFiber();
-    //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
+    printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
     fib2 = CreateFiber(2*4096, thread_routine2, (void *) (unsigned long) 50);
     printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
 
