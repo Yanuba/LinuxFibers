@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <stdbool.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <strings.h>
@@ -119,13 +118,15 @@ long FlsAlloc(void)
 }
 
 /*
- *@TO_DO
+ *  Free an FLS Index
+ *  Return false in case of error 
  * */
 bool FlsFree(long index) {
 
-    //clear index bit
+    if (ioctl(_FIBER_DESCRIPTOR, IOCTL_FREE, &index))
+        return false;
 
-    return;
+    return true;
 }
 
 
@@ -133,7 +134,7 @@ bool FlsFree(long index) {
  *@TO_DO
  * */
 long long FlsGetValue(long index){
-    return NULL;
+    return -1;
 }
 
 /*

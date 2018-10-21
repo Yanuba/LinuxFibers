@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 #include "Fibers_utypes.h"
 #include "Fibers_ioctls.h"
 

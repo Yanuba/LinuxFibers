@@ -365,4 +365,56 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 
 }
 
-long _ioctl_free(struct module_hashtable *hashtable, long* index) {}
+long _ioctl_free(struct module_hashtable *hashtable, long* arg) 
+{
+    struct process_active   *process;
+    struct fls_struct       *storage;
+
+    unsigned long           index;
+
+    pid_t tgid;
+    pid_t pid;
+
+    tgid = task_tgid_nr(current);
+    pid = task_pid_nr(current);
+
+    printk(KERN_NOTICE "%s: FLSFree() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
+
+    hash_for_each_possible(hashtable->htable, process, next, tgid) 
+    {
+        if (process->tgid == tgid) 
+        {
+            if (process->fls == NULL) 
+            {   
+                printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
+                return -ENOTTY;
+            }
+
+            if (copy_from_user((void *) &index, (void *) arg, sizeof(long)))
+            {
+                return -EFAULT;
+            }
+
+            storage = process->fls;
+            if (index > storage->current_size) 
+            {
+                printk(KERN_NOTICE "%s: FLSFree() FLSFree on invalid index for process %d\n", KBUILD_MODNAME, tgid);
+                return -ENOTTY;
+            }
+
+            clear_bit(index, storage->used_index);
+            return 0;
+
+        }
+    }
+
+    return -ENOTTY;
+
+
+}
+
+long _ioctl_get(struct module_hashtable *hashtable, union fls_args* args) 
+{return 0;}
+
+long _ioctl_set(struct module_hashtable *hashtable, union fls_args* args) 
+{return 0;}

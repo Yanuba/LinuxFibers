@@ -15,6 +15,6 @@ union fls_args
 {
     unsigned long   index;
     long long       value;        
-}
+};
 
 #endif  /* !FUTYPES_H*/

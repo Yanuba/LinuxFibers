@@ -9,7 +9,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next);
 
 long _ioctl_alloc(struct module_hashtable *hashtable, long* index);
 long _ioctl_free(struct module_hashtable *hashtable, long* index);
-//long _ioctl_get(struct module_hashtable *hashtable, );
-//long _ioctl_set(struct module_hashtable *hashtable, );
+long _ioctl_get(struct module_hashtable *hashtable, union fls_args*);
+long _ioctl_set(struct module_hashtable *hashtable, union fls_args*);
 
 #endif /* !FKIOCTLS_H */
