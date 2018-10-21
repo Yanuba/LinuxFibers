@@ -11,9 +11,9 @@
 #define IOCTL_SWITCH _IOWR(IOCTL_MAGIC_NUM, 2, unsigned long /*Or type passed here*/) //SwitchToFiber(...)
 
 //FLS IOCTL
-#define IOCTL_ALLOC _IO(IOCTL_MAGIC_NUM, 3) //FlsAlloc(...)
-#define IOCTL_FREE _IOW(IOCTL_MAGIC_NUM, 4, unsigned long /*Or type passed here*/) //FlsFree(...)
-#define IOCTL_GET _IOWR(IOCTL_MAGIC_NUM, 5, unsigned long /*Or type passed here*/) //FlsGetValue(...)
-#define IOCTL_SET _IOW(IOCTL_MAGIC_NUM, 6, unsigned long /*Or type passed here*/) //FlsSetValue(...)
+#define IOCTL_ALLOC _IOR (IOCTL_MAGIC_NUM, 3, unsigned long /*Or type passed here*/) //FlsAlloc(...)
+#define IOCTL_FREE  _IOW (IOCTL_MAGIC_NUM, 4, unsigned long /*Or type passed here*/) //FlsFree(...)
+#define IOCTL_GET   _IOWR(IOCTL_MAGIC_NUM, 5, unsigned long /*Or type passed here*/) //FlsGetValue(...)
+#define IOCTL_SET   _IOW (IOCTL_MAGIC_NUM, 6, unsigned long /*Or type passed here*/) //FlsSetValue(...)
 
 #endif /* !FIOCTLS_H */

@@ -5,7 +5,8 @@ CC = gcc -Wall
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
-	gcc Fibers.c -lpthread	#Change this
+	gcc -c Fibers.c	#Change this
+	gcc -o test Fibers.o FTest.c -lpthread
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-	rm a.out	#Change this
+	rm test

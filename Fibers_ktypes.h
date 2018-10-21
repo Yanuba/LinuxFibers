@@ -11,6 +11,8 @@
 #define FIBER_RUNNING 1
 #define FIBER_WAITING 0
 
+#define MAX_FLS_INDEX 4096 //Up to 32Kb for process
+
 /* 
  * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
  * Max pid on this system is 32768, if we exclude pid 0 we can have 32767 different pids,
@@ -18,26 +20,41 @@
  * 
  * Wrapped in a struct so we can pass it as function parameter
  * */
-struct module_hashtable{
+struct module_hashtable
+{
     DECLARE_HASHTABLE(htable, 15);
 };
 
-struct process_active {
-    pid_t tgid;                          //process id
-    pid_t next_fid;                    //will be next fiber id                        
-    struct hlist_head running_fibers;   //running fibers of the process
-    struct hlist_head waiting_fibers;   //waiting fibers of the process
-    struct hlist_node next;            //other process in the bucket
+/*
+ * Struct to handle the fls
+ * We have a dynamic array for fls
+ * and we use a bitmask to identify whether an index is available or not.
+ * */
+struct fls_struct {
+    unsigned long   current_size;   // size of fls array 
+    unsigned long   size;           // number of index used
+    long long       *fls;           // fls array
+    unsigned long   *used_index;    // bitmap for marking fls index allocated
 };
 
-struct fiber_struct {
+struct process_active 
+{
+    pid_t tgid;                         //process id
+    pid_t next_fid;                     //will be next fiber id                        
+    struct hlist_head running_fibers;   //running fibers of the process
+    struct hlist_head waiting_fibers;   //waiting fibers of the process
+    struct hlist_node next;             //other process in the bucket
+    struct fls_struct *fls;             //Fiber local storage
+};
+
+struct fiber_struct 
+{
     pid_t fiber_id;
     pid_t thread_on;        //last thread the fiber runs on
     struct hlist_node next; //must queue fibers
     
-    //maybe we need only the pointer?
-    struct pt_regs regs; //regs = task_pt_regs(current); (where regs is of type struct pt_regs*)  
-    struct fpu fpu_regs; //fpu__save(struct fpu *) and fpu__restore(struct fpu *)? //why not fpu_save with an fpu_state_struct?
+    struct pt_regs regs;    //CPU state
+    struct fpu fpu_regs;    //FPU state
 
     /* Fields to be exposed in proc */
     short   status;                 //The fiber is running or not?

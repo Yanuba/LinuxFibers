@@ -27,11 +27,13 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     struct task_struct *caller;
     caller = current;
 
-    switch(cmd) {        
+    switch(cmd) 
+    {        
         case IOCTL_CONVERT:
             printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
             
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_t))) {
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_t)))
+            {
                 printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
@@ -41,7 +43,8 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
         case IOCTL_CREATE:
             printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
 
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct fiber_args))) {
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct fiber_args)))
+            {
                 printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
@@ -49,7 +52,8 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             return _ioctl_create(&process_table, (struct fiber_args*) arg);
 
         case IOCTL_SWITCH:
-            if (!access_ok(VERIFY_READ, arg, sizeof(fiber_t))) {
+            if (!access_ok(VERIFY_READ, arg, sizeof(fiber_t))) 
+            {
                 printk(KERN_NOTICE "%s:  SwitchToFiber() cannot read data from userspace\n", KBUILD_MODNAME);
                 return -EFAULT; //Is this correct?
             }
@@ -57,12 +61,13 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             return _ioctl_switch(&process_table, (fiber_t *) arg);
 
         case IOCTL_ALLOC:
-            
-            /*
-            FlsAlloc() : Allocates a FLS index
-            */ 
-            printk(KERN_NOTICE "%s: 'FlsAlloc()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(long)))
+            {
+                printk(KERN_NOTICE "%s: FlsAlloc() cannot return data to userspace\n", KBUILD_MODNAME);
+                return -EFAULT;
+            }
+
+            return _ioctl_alloc(&process_table, (long *) arg);
 
         case IOCTL_FREE: 
             
