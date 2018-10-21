@@ -121,7 +121,10 @@ long FlsAlloc(void)
 /*
  *@TO_DO
  * */
-void FlsFree(long index) {
+bool FlsFree(long index) {
+
+    //clear index bit
+
     return;
 }
 
@@ -129,14 +132,14 @@ void FlsFree(long index) {
 /*
  *@TO_DO
  * */
-void *FlsGetValue(long index){
+long long FlsGetValue(long index){
     return NULL;
 }
 
 /*
  *@TO_DO
  * */
-void FlsSetValue(long index, void* value){
+void FlsSetValue(long index, long long value){
     return;
 }
 

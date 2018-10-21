@@ -334,7 +334,6 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
                 
             }
 
-
             last_bit = storage->current_size;
             printk(KERN_NOTICE "%s: FLSAlloc() last bit is %ld, for process %d\n", KBUILD_MODNAME, last_bit, tgid); 
 
@@ -365,3 +364,5 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     return -ENOTTY;
 
 }
+
+long _ioctl_free(struct module_hashtable *hashtable, long* index) {}
