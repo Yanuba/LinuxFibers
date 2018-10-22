@@ -151,6 +151,11 @@ long long FlsGetValue(long index){
  *@TO_DO
  * */
 void FlsSetValue(long index, long long value){
+    struct fls_args args;
+    args.index = index;
+    args.value = value;
+
+    ioctl(_FIBER_DESCRIPTOR, IOCTL_GET, &args);
     return;
 }
 

@@ -413,10 +413,6 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
 
 }
 
-/*
- * What return in case of failure? NULL?
- * 
- * */
 long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args) 
 {
     struct process_active   *process;
@@ -478,7 +474,62 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     }
     
     printk(KERN_NOTICE "%s: FLSGet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
-    return -ENOTTY;}
+    return -ENOTTY;
+}
 
 long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args) 
-{return 0;}
+{
+    struct process_active   *process;
+    struct fls_struct       *storage;
+    
+    struct fls_args           *ret;
+
+    pid_t tgid;
+    pid_t pid;
+
+    tgid = task_tgid_nr(current);
+    pid = task_pid_nr(current);
+    
+    hash_for_each_possible(hashtable->htable, process, next, tgid) 
+    {
+        if (process->tgid == tgid) 
+        {
+            if (process->fls == NULL) 
+            {   
+                printk(KERN_NOTICE "%s: FLSSet() fls not initialized for process %d\n", KBUILD_MODNAME, tgid);
+                return -ENOTTY;
+            }
+
+            ret = kvmalloc(sizeof(struct fls_args), GFP_KERNEL);
+            if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
+            {   
+                kfree(ret);
+                return -EFAULT;
+            }
+
+            storage = process->fls;
+
+            if ((ret->index) > (storage->current_size))
+            {   
+                printk(KERN_NOTICE "%s: FLSSet() fls accessing invalud index for process %d\n", KBUILD_MODNAME, tgid);
+                kfree(ret);
+                return -ENOTTY;
+            }
+
+            if (test_bit(ret->index, storage->used_index))
+            {
+               storage->fls[ret->index] = ret->value;
+               kfree(ret);
+               return 0;
+            }
+            else
+            {
+                kfree(ret);
+                return -ENOTTY;
+            }
+        }
+    }
+    
+    printk(KERN_NOTICE "%s: FLSSet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
+    return -ENOTTY;
+}
