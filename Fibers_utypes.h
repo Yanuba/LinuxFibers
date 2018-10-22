@@ -11,7 +11,7 @@ struct fiber_args
     fiber_t ret;
 };
 
-union fls_args
+struct fls_args
 {
     unsigned long   index;
     long long       value;        

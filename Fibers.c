@@ -131,10 +131,20 @@ bool FlsFree(long index) {
 
 
 /*
- *@TO_DO
+ *  GetValue associated to FLS Index
+ *  returns -1 in case of error
  * */
 long long FlsGetValue(long index){
-    return -1;
+    int ret;
+
+    struct fls_args args;
+    args.index = index;
+
+    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_GET, &args);
+    if (ret) 
+        return -1;
+    
+    return args.value;
 }
 
 /*

@@ -413,8 +413,72 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
 
 }
 
-long _ioctl_get(struct module_hashtable *hashtable, union fls_args* args) 
-{return 0;}
+/*
+ * What return in case of failure? NULL?
+ * 
+ * */
+long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args) 
+{
+    struct process_active   *process;
+    struct fls_struct       *storage;
+    
+    struct fls_args           *ret;
 
-long _ioctl_set(struct module_hashtable *hashtable, union fls_args* args) 
+    pid_t tgid;
+    pid_t pid;
+
+    tgid = task_tgid_nr(current);
+    pid = task_pid_nr(current);
+    
+    hash_for_each_possible(hashtable->htable, process, next, tgid) 
+    {
+        if (process->tgid == tgid) 
+        {
+            if (process->fls == NULL) 
+            {   
+                printk(KERN_NOTICE "%s: FLSGet() fls not initialized for process %d\n", KBUILD_MODNAME, tgid);
+                return -ENOTTY;
+            }
+
+            ret = kvmalloc(sizeof(struct fls_args), GFP_KERNEL);
+            if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
+            {   
+                kfree(ret);
+                return -EFAULT;
+            }
+
+            storage = process->fls;
+
+            if ((ret->index) > (storage->current_size))
+            {   
+                printk(KERN_NOTICE "%s: FLSGet() fls accessing invalud index for process %d\n", KBUILD_MODNAME, tgid);
+                kfree(ret);
+                return -ENOTTY;
+            }
+
+            if (test_bit(ret->index, storage->used_index))
+            {
+                ret->value = storage->fls[ret->index];
+                printk(KERN_NOTICE "%s: FLSGet() fls accessing index for process %d\n", KBUILD_MODNAME, tgid);
+                if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
+                {   
+                    printk(KERN_NOTICE "%s: FLSGet() cannot return for process %d\n", KBUILD_MODNAME, tgid);
+                    kfree(ret);
+                    return -EFAULT;
+                }
+                kfree(ret);
+                return 0;
+            }
+            else
+            {
+                kfree(ret);
+                return -ENOTTY;
+            }
+        }
+    }
+    
+    printk(KERN_NOTICE "%s: FLSGet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
+    return -ENOTTY;}
+
+long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args) 
 {return 0;}

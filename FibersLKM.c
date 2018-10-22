@@ -70,13 +70,14 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             return _ioctl_alloc(&process_table, (long *) arg);
 
         case IOCTL_FREE: 
+            if (!access_ok(VERIFY_READ, arg, sizeof(long)))
+            {
+                printk(KERN_NOTICE "%s: FlsFree() cannot read data from userspace\n", KBUILD_MODNAME);
+                return -EFAULT;
+            }
             
-            /*
-            FlsFree() : Frees a FLS index
-            */
-            printk(KERN_NOTICE "%s: 'FlsFree()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
-
+            return _ioctl_free(&process_table, (long *) arg);
+            
         case IOCTL_GET: 
             
             /*
