@@ -447,7 +447,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
 
             if ((ret->index) > (storage->current_size))
             {   
-                printk(KERN_NOTICE "%s: FLSGet() fls accessing invalud index for process %d\n", KBUILD_MODNAME, tgid);
+                printk(KERN_NOTICE "%s: FLSGet() fls accessing invalid index for process %d\n", KBUILD_MODNAME, tgid);
                 kfree(ret);
                 return -ENOTTY;
             }
@@ -455,7 +455,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
             if (test_bit(ret->index, storage->used_index))
             {
                 ret->value = storage->fls[ret->index];
-                printk(KERN_NOTICE "%s: FLSGet() fls accessing index for process %d\n", KBUILD_MODNAME, tgid);
+                printk(KERN_NOTICE "%s: FLSGet() fls accessing index for process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
                 if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
                 {   
                     printk(KERN_NOTICE "%s: FLSGet() cannot return for process %d\n", KBUILD_MODNAME, tgid);
@@ -517,7 +517,8 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
             }
 
             if (test_bit(ret->index, storage->used_index))
-            {
+            {   
+               printk(KERN_NOTICE "%s: FLSSet() process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
                storage->fls[ret->index] = ret->value;
                kfree(ret);
                return 0;

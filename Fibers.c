@@ -155,7 +155,7 @@ void FlsSetValue(long index, long long value){
     args.index = index;
     args.value = value;
 
-    ioctl(_FIBER_DESCRIPTOR, IOCTL_GET, &args);
+    ioctl(_FIBER_DESCRIPTOR, IOCTL_SET, &args);
     return;
 }
 

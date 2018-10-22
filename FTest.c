@@ -23,6 +23,14 @@ void * thread_routine2(void* arg) {
     unsigned long idx = FlsAlloc();
     printf("? Got fls index: %ld\n", idx);
 
+    FlsSetValue(idx, 150);
+
+    long long b = FlsGetValue(idx);
+
+    printf("%llu\n", b);
+
+    printf("%d\n", FlsFree(idx));
+
     printf("FIIIIIIIIIIIIIBER\n");
     
     SwitchToFiber(fib);
@@ -44,12 +52,20 @@ void * thread_routine(void* arg) {
     //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
 
     unsigned long idx = FlsAlloc();
-    printf("! Got fls index: %lu\n", idx);
+    printf("! Got fls index: %ld\n", idx);
+    
+
 
     SwitchToFiber(fib2);
     printf("My pid is bacl from hell\n");
     SwitchToFiber(fib2);
     printf("My pid is bacl from hello\n");
+
+    printf("! %d\n", FlsFree(idx));
+    FlsSetValue(idx, 240);
+    long long b = FlsGetValue(idx);
+    printf("! %llu\n", b);
+
     //fiber_id* fib3 = CreateFiber(4096, thread_routine2, (void *) (unsigned long) 50);
     //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib3);
     return 0;

@@ -80,20 +80,23 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
             
         case IOCTL_GET: 
             
-            /*
-            FlsGetValue() : Gets the value associated with a FLS
-            index (a long)
-            */
-            printk(KERN_NOTICE "%s: 'FlsGetValue()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
+            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct fls_args)))
+            {
+                printk(KERN_NOTICE "%s: FlsFree() cannot read data from userspace\n", KBUILD_MODNAME);
+                return -EFAULT;
+            }
+            
+            return _ioctl_get(&process_table, (struct fls_args *) arg);
 
         case IOCTL_SET:
             
-            /*
-            FlsSetValue() : Sets a value associated with a FLS index (a long)
-            */
-            printk(KERN_NOTICE "%s: 'FlsSetValue()' Not Implemented yet\n", KBUILD_MODNAME);
-            break;
+            if (!access_ok(VERIFY_READ, arg, sizeof(struct fls_args)))
+            {
+                printk(KERN_NOTICE "%s: FlsFree() cannot read data from userspace\n", KBUILD_MODNAME);
+                return -EFAULT;
+            }
+            
+            return _ioctl_set(&process_table, (struct fls_args *) arg);
 
         default:
             printk(KERN_NOTICE "%s: Default ioctl called\n", KBUILD_MODNAME);
