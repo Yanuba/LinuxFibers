@@ -22,6 +22,8 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
+//use macros to extrac arg sizes in IOCTL function (They exists for some reason)
+
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
     struct task_struct *caller;
@@ -175,6 +177,7 @@ static void __exit fibers_exit(void)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Umberto Mazziotta <mazziotta.1647818@studenti.uniroma1.it>");
+MODULE_AUTHOR("Andrea Mastropietro <mastropietro.1652886@studenti.uniroma1.it>")
 MODULE_DESCRIPTION("Fibers LKM");
 
 module_init(fibers_init);
