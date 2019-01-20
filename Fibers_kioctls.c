@@ -34,9 +34,10 @@ struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void*
 
         //fiber created by CreateFiber()
         if (entry_point != NULL) 
-        {
+        {   
+            fiber->activations = 0;
             fiber->status = FIBER_WAITING;
-            fiber->regs.ip = (unsigned long) entry_point;
+            fiber->regs.ip = (unsigned long) enallocate_fibertry_point;
             fiber->regs.di = (unsigned long) args;
             fiber->regs.sp = fiber->regs.bp = (unsigned long) stack_base;
         }
@@ -549,16 +550,3 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     printk(KERN_NOTICE "%s: FLSSet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
     return -ENOTTY;
 }
-
-
-/*
-hash_for_each_possible(hashtable->htable, process, next, tgid) 
-    {
-        if (process->tgid == tgid) 
-            break;
-    }
-
-    if (process != NULL && process->tgid == tgid)
-    {
-    }
-*/
