@@ -310,65 +310,68 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     hash_for_each_possible(hashtable->htable, process, next, tgid) 
     {
         if (process->tgid == tgid) 
+            break;
+    }
+
+    if (process != NULL && process->tgid == tgid)
+    {
+        if (process->fls == NULL) 
         {
-            if (process->fls == NULL) 
-            {
-                printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
-                process->fls = kzalloc(sizeof(struct fls_struct), GFP_KERNEL);
-                process->fls->current_size = process->next_fid < MAX_FLS_INDEX?process->next_fid : MAX_FLS_INDEX;
-                process->fls->fls = kvzalloc(sizeof(long long)* process->fls->current_size , GFP_KERNEL);
-                process->fls->size = 0;
-                process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(process->fls->current_size),GFP_KERNEL);
-            }
-            storage = process->fls;
-            if (storage->size >= storage->current_size) 
-            {   
-                printk(KERN_NOTICE "%s: FLSAlloc() resizing FLS for process %d\n", KBUILD_MODNAME, tgid);
-                new_size = storage->current_size * 2 < MAX_FLS_INDEX? storage->current_size*2:MAX_FLS_INDEX;
-                last_bit = BITS_TO_LONGS(new_size);
-                
-                tmp = krealloc(storage->fls, sizeof(long long)*new_size, GFP_KERNEL);
-                if (!tmp)
-                    return -ENOMEM;
-                storage->fls = tmp;
-                tmp = krealloc(storage->used_index, sizeof(unsigned long)*last_bit, GFP_KERNEL);
-                if (!tmp)
-                    return -ENOMEM;
-                storage->used_index = tmp;
-
-                storage->current_size = new_size;
-                
-            }
-
-            last_bit = storage->current_size;
-            printk(KERN_NOTICE "%s: FLSAlloc() last bit is %ld, for process %d\n", KBUILD_MODNAME, last_bit, tgid); 
-
-            index = find_first_zero_bit(storage->used_index, last_bit);   
-            
-            printk(KERN_NOTICE "%s: FLSAlloc() FLS index is %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
-
-            if (index < last_bit) 
-            {
-                storage->size += 1;
-                set_bit(index, storage->used_index);
-
-                printk(KERN_NOTICE "%s: FLSAlloc() retruning FLS index %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
-
-                if (copy_to_user((void *) arg, (void *) &index, sizeof(long)))
-                {
-                    printk(KERN_NOTICE "%s:  FlsAlloc() cannot return index\n", KBUILD_MODNAME);
-                    clear_bit(index, storage->used_index);
-                    return -EFAULT;
-                } 
-                return 0;
-            }
-            else
-                return -ENOTTY;
+            printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
+            process->fls = kzalloc(sizeof(struct fls_struct), GFP_KERNEL);
+            process->fls->current_size = process->next_fid < MAX_FLS_INDEX?process->next_fid : MAX_FLS_INDEX;
+            process->fls->fls = kvzalloc(sizeof(long long)* process->fls->current_size , GFP_KERNEL);
+            process->fls->size = 0;
+            process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(process->fls->current_size),GFP_KERNEL);
         }
+            
+        storage = process->fls;
+        if (storage->size >= storage->current_size) 
+        {   
+            printk(KERN_NOTICE "%s: FLSAlloc() resizing FLS for process %d\n", KBUILD_MODNAME, tgid);
+            new_size = storage->current_size * 2 < MAX_FLS_INDEX? storage->current_size*2:MAX_FLS_INDEX;
+            last_bit = BITS_TO_LONGS(new_size);
+                
+            tmp = krealloc(storage->fls, sizeof(long long)*new_size, GFP_KERNEL);
+            if (!tmp)
+                return -ENOMEM;
+            
+            storage->fls = tmp;
+            
+            tmp = krealloc(storage->used_index, sizeof(unsigned long)*last_bit, GFP_KERNEL);
+            if (!tmp)
+                return -ENOMEM;
+            storage->used_index = tmp;
+            storage->current_size = new_size;
+        }
+
+        last_bit = storage->current_size;
+        printk(KERN_NOTICE "%s: FLSAlloc() last bit is %ld, for process %d\n", KBUILD_MODNAME, last_bit, tgid); 
+
+        index = find_first_zero_bit(storage->used_index, last_bit);   
+            
+        printk(KERN_NOTICE "%s: FLSAlloc() FLS index is %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
+
+        if (index < last_bit) 
+        {
+            storage->size += 1;
+            set_bit(index, storage->used_index);
+
+            printk(KERN_NOTICE "%s: FLSAlloc() retruning FLS index %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
+
+            if (copy_to_user((void *) arg, (void *) &index, sizeof(long)))
+            {
+                printk(KERN_NOTICE "%s:  FlsAlloc() cannot return index\n", KBUILD_MODNAME);
+                clear_bit(index, storage->used_index);
+                return -EFAULT;
+            } 
+            return 0;
+        }
+        else
+            return -ENOTTY;
     }
 
     return -ENOTTY;
-
 }
 
 long _ioctl_free(struct module_hashtable *hashtable, long* arg) 
@@ -388,35 +391,35 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
 
     hash_for_each_possible(hashtable->htable, process, next, tgid) 
     {
-        if (process->tgid == tgid) 
-        {
-            if (process->fls == NULL) 
-            {   
-                printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
-                return -ENOTTY;
-            }
+        if (process->tgid == tgid)
+            break;
+    }
 
-            if (copy_from_user((void *) &index, (void *) arg, sizeof(long)))
-            {
-                return -EFAULT;
-            }
-
-            storage = process->fls;
-            if (index > storage->current_size) 
-            {
-                printk(KERN_NOTICE "%s: FLSFree() FLSFree on invalid index for process %d\n", KBUILD_MODNAME, tgid);
-                return -ENOTTY;
-            }
-
-            clear_bit(index, storage->used_index);
-            return 0;
-
+    if (process != NULL && process->tgid == tgid)
+    {
+        if (process->fls == NULL) 
+        {   
+            printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
+            return -ENOTTY;
         }
+
+        if (copy_from_user((void *) &index, (void *) arg, sizeof(long)))
+        {
+            return -EFAULT;
+        }
+
+        storage = process->fls;
+        if (index > storage->current_size) 
+        {
+            printk(KERN_NOTICE "%s: FLSFree() FLSFree on invalid index for process %d\n", KBUILD_MODNAME, tgid);
+            return -ENOTTY;
+        }
+
+        clear_bit(index, storage->used_index);
+        return 0;
     }
 
     return -ENOTTY;
-
-
 }
 
 long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args) 
