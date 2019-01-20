@@ -153,7 +153,7 @@ static int __init fibers_init(void)
 
     printk(KERN_NOTICE "%s: Module mounted, device registered with major %d \n", KBUILD_MODNAME, dev_major);
 
-    hash_init(process_table.htable); 
+    hash_init(process_table.htable); //should be destroyed?
 
     return 0;
 
@@ -177,7 +177,7 @@ static void __exit fibers_exit(void)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Umberto Mazziotta <mazziotta.1647818@studenti.uniroma1.it>");
-MODULE_AUTHOR("Andrea Mastropietro <mastropietro.1652886@studenti.uniroma1.it>")
+MODULE_AUTHOR("Andrea Mastropietro <mastropietro.1652886@studenti.uniroma1.it>");
 MODULE_DESCRIPTION("Fibers LKM");
 
 module_init(fibers_init);

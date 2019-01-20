@@ -30,7 +30,7 @@ struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void*
         INIT_HLIST_NODE(&fiber->next);
 
         (void) memcpy(&(fiber->regs), task_pt_regs(p), sizeof(struct pt_regs));
-        copy_fxregs_to_kernel(&(fiber->fpu_regs));
+        copy_fxregs_to_kernel(&(fiber->fpu_regs)); //save FPU state
 
         //fiber created by CreateFiber()
         if (entry_point != NULL) 
@@ -76,22 +76,25 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    hash_for_each_possible(hashtable->htable, process, next, tgid) 
+    hash_for_each_possible(hashtable->htable, process, next, tgid)
     {
-        if (process->tgid == tgid) //Needed in case of collision
-        { 
-            printk(KERN_NOTICE "%s:ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
-            hlist_for_each(cursor, &process->running_fibers) 
+        if (process->tgid == tgid)
+            break;
+    }
+
+    if (process != NULL && process->tgid == tgid) 
+    { 
+        printk(KERN_NOTICE "%s:ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
+        hlist_for_each(cursor, &process->running_fibers) 
+        {
+            fiber = hlist_entry(cursor, struct fiber_struct, next);
+            if (fiber->parent_thread == pid) 
             {
-                fiber = hlist_entry(cursor, struct fiber_struct, next);
-                if (fiber->parent_thread == pid) 
-                {
-                    printk(KERN_NOTICE "%s:ConvertThreadToFiber() Thread %d is alrady a fiber\n", KBUILD_MODNAME, tgid);
-                    return -ENOTTY;
-                }
+                printk(KERN_NOTICE "%s:ConvertThreadToFiber() Thread %d is alrady a fiber\n", KBUILD_MODNAME, tgid);
+                return -ENOTTY;
             }
-            goto ALLOCATE_FIBER;
         }
+        goto ALLOCATE_FIBER;
     }
 
     printk(KERN_NOTICE "%s: ConvertThreadToFiber() Thread %d No active process found\n", KBUILD_MODNAME, pid); 
@@ -146,40 +149,43 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
 
     hash_for_each_possible(hashtable->htable, process, next, tgid) 
     {
-        if (process->tgid == tgid) 
-        {
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, pid);
-            usr_buf = (struct fiber_args *) kmalloc(sizeof(struct fiber_args), GFP_KERNEL);
-        
-            if (copy_from_user((void *) usr_buf, (void *) args, sizeof(struct fiber_args)))
-            {
-                printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, pid);
-                kfree(usr_buf);
-                return -EFAULT;
-            }
-        
-            fiber = allocate_fiber(process->next_fid++, current, usr_buf->routine, usr_buf->routine_args, usr_buf->stack_address);
-            hlist_add_head(&fiber->next, &process->waiting_fibers);
-
-            usr_buf->ret = fiber->fiber_id;
-
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, pid, fiber->fiber_id);
-
-            if (copy_to_user((void *) args, (void *) usr_buf, sizeof(struct fiber_args))) 
-            {
-                printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot Return To User\n", KBUILD_MODNAME, pid);
-                hlist_del(&fiber->next);
-                kfree(fiber);
-                kfree(usr_buf);
-                return -EFAULT;
-            }
-
-            kfree(usr_buf);
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, pid);
-            return 0;
-        }
+        if (process->tgid == tgid)
+            break;
     }
 
+    if (process != NULL && process->tgid == tgid)
+    {
+        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, pid);
+        usr_buf = (struct fiber_args *) kmalloc(sizeof(struct fiber_args), GFP_KERNEL);
+        
+        if (copy_from_user((void *) usr_buf, (void *) args, sizeof(struct fiber_args)))
+        {
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, pid);
+            kfree(usr_buf);
+            return -EFAULT;
+        }
+        
+        fiber = allocate_fiber(process->next_fid++, current, usr_buf->routine, usr_buf->routine_args, usr_buf->stack_address);
+        hlist_add_head(&fiber->next, &process->waiting_fibers);
+
+        usr_buf->ret = fiber->fiber_id;
+
+        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, pid, fiber->fiber_id);
+
+        if (copy_to_user((void *) args, (void *) usr_buf, sizeof(struct fiber_args))) 
+        {
+            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot Return To User\n", KBUILD_MODNAME, pid);
+            hlist_del(&fiber->next);
+            kfree(fiber);
+            kfree(usr_buf);
+            return -EFAULT;
+        }
+
+        kfree(usr_buf);
+        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, pid);
+        return 0;
+    }
+    
     printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, pid);
     return -ENOTTY;
 
@@ -253,10 +259,10 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
                         //do context switch
                         preempt_disable();
                         printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
-                        copy_fxregs_to_kernel(&(switch_prev->fpu_regs));
+                        copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
                         (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
                         (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
-                        copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave));
+                        copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
                         preempt_enable();
 
                         switch_next->activations += 1;
