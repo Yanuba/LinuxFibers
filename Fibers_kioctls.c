@@ -37,7 +37,7 @@ struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void*
         {   
             fiber->activations = 0;
             fiber->status = FIBER_WAITING;
-            fiber->regs.ip = (unsigned long) enallocate_fibertry_point;
+            fiber->regs.ip = (unsigned long) entry_point;
             fiber->regs.di = (unsigned long) args;
             fiber->regs.sp = fiber->regs.bp = (unsigned long) stack_base;
         }
