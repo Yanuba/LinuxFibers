@@ -467,7 +467,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         }
 
         if (test_bit(ret->index, storage->used_index))
-        {
+        {allocate_fiber
             ret->value = storage->fls[ret->index];
             printk(KERN_NOTICE "%s: FLSGet() fls accessing index for process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
             if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
