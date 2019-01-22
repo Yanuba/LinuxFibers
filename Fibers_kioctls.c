@@ -12,7 +12,7 @@
 /*
  * Function to find process in hashtable
  * */
-inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
+static inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
 {
     struct process_active *ret;
     hash_for_each_possible(hashtable->htable, ret, next, tgid)
@@ -224,61 +224,60 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
     printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, requested: %d\n", KBUILD_MODNAME, pid, *id_next);
 
-    hash_for_each_possible(hashtable->htable, process, next, tgid) 
+    process = find_process(hashtable, tgid);
+    
+    if (process != NULL) 
     {
-        if (process->tgid == tgid) 
+        hlist_for_each(list_cursor, &process->waiting_fibers) 
         {
-            hlist_for_each(list_cursor, &process->waiting_fibers) 
+            cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+                
+            printk(KERN_NOTICE "%s: SwitchToFiber() WAITING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
+                
+            if (cursor->fiber_id == *id_next) 
             {
-                cursor = hlist_entry(list_cursor, struct fiber_struct, next);
-                
-                printk(KERN_NOTICE "%s: SwitchToFiber() WAITING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
-                
-                if (cursor->fiber_id == *id_next) 
-                {
-                    switch_next = cursor;
-                }
+                switch_next = cursor;
             }
+        }
         
-            hlist_for_each(list_cursor, &process->running_fibers) 
+        hlist_for_each(list_cursor, &process->running_fibers) 
+        {
+            cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+
+            printk(KERN_NOTICE "%s: SwitchToFiber() RUNNING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
+
+            if (cursor->fiber_id == *id_next) 
             {
-                cursor = hlist_entry(list_cursor, struct fiber_struct, next);
-
-                printk(KERN_NOTICE "%s: SwitchToFiber() RUNNING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
-
-                if (cursor->fiber_id == *id_next) 
+                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, pid);
+                cursor->failed_activations += 1;
+                return -ENOTTY;
+            }
+            else if (cursor->thread_on == pid) 
+            {
+                switch_prev = cursor;
+                if (switch_next != NULL) 
                 {
-                    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, pid);
-                    cursor->failed_activations += 1;
-                    return -ENOTTY;
-                }
-                else if (cursor->thread_on == pid) 
-                {
-                    switch_prev = cursor;
-                    if (switch_next != NULL) 
-                    {
-                        //do context switch
-                        preempt_disable();
-                        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
-                        copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
-                        (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
-                        (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
-                        copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
-                        preempt_enable();
+                    //do context switch
+                    preempt_disable();
+                    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
+                    copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
+                    (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
+                    (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
+                    copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
+                    preempt_enable();
 
-                        switch_next->activations += 1;
-                        switch_next->status = FIBER_RUNNING;
-                        switch_prev->status = FIBER_WAITING;
+                    switch_next->activations += 1;
+                    switch_next->status = FIBER_RUNNING;
+                    switch_prev->status = FIBER_WAITING;
 
-                        hlist_del(&(switch_next->next));
-                        hlist_del(&(switch_prev->next));
+                    hlist_del(&(switch_next->next));
+                    hlist_del(&(switch_prev->next));
 
-                        hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
-                        hlist_add_head(&(switch_next->next), &(process->running_fibers));
+                    hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
+                    hlist_add_head(&(switch_next->next), &(process->running_fibers));
                         
-                        return 0;
+                    return 0;
 
-                    }
                 }
             }
         }
@@ -507,3 +506,7 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     printk(KERN_NOTICE "%s: FLSSet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
     return -ENOTTY;
 }
+
+/*
+ * Missing Cleanup of the data structures when a fiber exits or when the module is unmounted
+ */
