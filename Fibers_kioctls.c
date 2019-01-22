@@ -85,13 +85,13 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
 
     if (process != NULL && process->tgid == tgid) 
     { 
-        printk(KERN_NOTICE "%s:ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
+        printk(KERN_NOTICE "%s: ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
         hlist_for_each(cursor, &process->running_fibers) 
         {
             fiber = hlist_entry(cursor, struct fiber_struct, next);
             if (fiber->parent_thread == pid) 
             {
-                printk(KERN_NOTICE "%s:ConvertThreadToFiber() Thread %d is alrady a fiber\n", KBUILD_MODNAME, tgid);
+                printk(KERN_NOTICE "%s: ConvertThreadToFiber() Thread %d is alrady a fiber\n", KBUILD_MODNAME, tgid);
                 return -ENOTTY;
             }
         }
@@ -120,7 +120,7 @@ ALLOCATE_FIBER:
   
     if (copy_to_user((void *) arg, (void *) &fiber->fiber_id,sizeof(fiber_t))) 
     {
-        printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
+        printk(KERN_NOTICE "%s: ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
         hlist_del(&fiber->next);
         kfree(fiber);
         //Process info can stay
