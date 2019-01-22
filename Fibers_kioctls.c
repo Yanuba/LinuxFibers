@@ -87,7 +87,7 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
 
     process = find_process(hashtable, tgid);
     
-    if (process != NULL) 
+    if (process) 
     { 
         printk(KERN_NOTICE "%s: ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
         hlist_for_each(cursor, &process->running_fibers) 
@@ -127,7 +127,7 @@ ALLOCATE_FIBER:
         printk(KERN_NOTICE "%s: ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
         hlist_del(&fiber->next);
         kfree(fiber);
-        //Process info can stay
+        //If the first call of a process fails here, we can create fiber even if we are not in a fiber context
         return -EFAULT;
     }
  
@@ -154,44 +154,47 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
 
     process = find_process(hashtable, tgid);
     
-    if (process != NULL)
+    if (!process)
     {
-        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, pid);
-        usr_buf = (struct fiber_args *) kmalloc(sizeof(struct fiber_args), GFP_KERNEL);
-        
-        if (copy_from_user((void *) usr_buf, (void *) args, sizeof(struct fiber_args)))
-        {
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, pid);
-            kfree(usr_buf);
-            return -EFAULT;
-        }
-        
-        fiber = allocate_fiber(process->next_fid++, current, usr_buf->routine, usr_buf->routine_args, usr_buf->stack_address);
-        hlist_add_head(&fiber->next, &process->waiting_fibers);
-
-        usr_buf->ret = fiber->fiber_id;
-
-        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, pid, fiber->fiber_id);
-
-        if (copy_to_user((void *) args, (void *) usr_buf, sizeof(struct fiber_args))) 
-        {
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot Return To User\n", KBUILD_MODNAME, pid);
-            hlist_del(&fiber->next);
-            kfree(fiber);
-            kfree(usr_buf);
-            return -EFAULT;
-        }
-
-        kfree(usr_buf);
-        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, pid);
-        return 0;
+        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, pid);
+        return -ENOTTY;
     }
-    
-    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d cannot be executed sice it is not a Fiber\n", KBUILD_MODNAME, pid);
-    return -ENOTTY;
 
+    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, pid);
+    usr_buf = (struct fiber_args *) kmalloc(sizeof(struct fiber_args), GFP_KERNEL);
+        
+    if (copy_from_user((void *) usr_buf, (void *) args, sizeof(struct fiber_args)))
+    {
+        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, pid);
+        kfree(usr_buf);
+        return -EFAULT;
+    }
+        
+    fiber = allocate_fiber(process->next_fid++, current, usr_buf->routine, usr_buf->routine_args, usr_buf->stack_address);
+    hlist_add_head(&fiber->next, &process->waiting_fibers);
+
+    usr_buf->ret = fiber->fiber_id;
+
+    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, pid, fiber->fiber_id);
+
+    if (copy_to_user((void *) args, (void *) usr_buf, sizeof(struct fiber_args))) 
+    {
+        printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot Return To User\n", KBUILD_MODNAME, pid);
+        hlist_del(&fiber->next);
+        kfree(fiber);
+        kfree(usr_buf);
+        return -EFAULT;
+    }
+
+    kfree(usr_buf);
+    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, pid);
+    return 0;
+    
 }
 
+/*
+ * Need a review
+ * */
 long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next) 
 {
     struct fiber_struct     *switch_prev;
@@ -226,67 +229,70 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
     process = find_process(hashtable, tgid);
     
-    if (process != NULL) 
+    if (!process) 
     {
-        hlist_for_each(list_cursor, &process->waiting_fibers) 
+        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Failed, since not running in fiber context\n", KBUILD_MODNAME, pid);
+        return -ENOTTY;
+    }
+
+    hlist_for_each(list_cursor, &process->waiting_fibers) 
+    {
+        cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+                
+        printk(KERN_NOTICE "%s: SwitchToFiber() WAITING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
+                
+        if (cursor->fiber_id == *id_next) 
         {
-            cursor = hlist_entry(list_cursor, struct fiber_struct, next);
-                
-            printk(KERN_NOTICE "%s: SwitchToFiber() WAITING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
-                
-            if (cursor->fiber_id == *id_next) 
-            {
-                switch_next = cursor;
-            }
+            switch_next = cursor;
         }
+    }
         
-        hlist_for_each(list_cursor, &process->running_fibers) 
+    hlist_for_each(list_cursor, &process->running_fibers) 
+    {
+        cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+
+        printk(KERN_NOTICE "%s: SwitchToFiber() RUNNING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
+
+        if (cursor->fiber_id == *id_next) 
         {
-            cursor = hlist_entry(list_cursor, struct fiber_struct, next);
-
-            printk(KERN_NOTICE "%s: SwitchToFiber() RUNNING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
-
-            if (cursor->fiber_id == *id_next) 
+            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, pid);
+            cursor->failed_activations += 1;
+            return -ENOTTY;
+        }
+        else if (cursor->thread_on == pid) 
+        {
+            switch_prev = cursor;
+            if (switch_next != NULL) 
             {
-                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, pid);
-                cursor->failed_activations += 1;
-                return -ENOTTY;
-            }
-            else if (cursor->thread_on == pid) 
-            {
-                switch_prev = cursor;
-                if (switch_next != NULL) 
-                {
-                    //do context switch
-                    preempt_disable();
-                    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
-                    copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
-                    (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
-                    (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
-                    copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
-                    preempt_enable();
+                //do context switch
+                preempt_disable();
+                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
+                copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
+                (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
+                (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
+                copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
+                preempt_enable();
 
-                    switch_next->activations += 1;
-                    switch_next->status = FIBER_RUNNING;
-                    switch_prev->status = FIBER_WAITING;
+                switch_next->activations += 1;
+                switch_next->status = FIBER_RUNNING;
+                switch_prev->status = FIBER_WAITING;
 
-                    hlist_del(&(switch_next->next));
-                    hlist_del(&(switch_prev->next));
+                hlist_del(&(switch_next->next));
+                hlist_del(&(switch_prev->next));
 
-                    hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
-                    hlist_add_head(&(switch_next->next), &(process->running_fibers));
+                hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
+                hlist_add_head(&(switch_next->next), &(process->running_fibers));
                         
-                    return 0;
+                return 0;
 
-                }
             }
         }
     }
 
     printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Failed, since not running in fiber context\n", KBUILD_MODNAME, pid);
     return -ENOTTY;
+}  
 
-}
 
 long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 {   
@@ -305,42 +311,43 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 
     process = find_process(hashtable, tgid);
     
-    if (process != NULL)
+    if (!process)
+        return -ENOTTY;
+
+    if (process->fls == NULL) 
     {
-        if (process->fls == NULL) 
-        {
-            printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
-            process->fls = kzalloc(sizeof(struct fls_struct), GFP_KERNEL);
-            process->fls->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
-            process->fls->size = 0;
-            process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL);
-        }
-            
-        storage = process->fls;
-        index = find_first_zero_bit(storage->used_index, MAX_FLS_INDEX);   
-            
-        printk(KERN_NOTICE "%s: FLSAlloc() FLS index is %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
-
-        if (index < MAX_FLS_INDEX) 
-        {
-            storage->size += 1;
-            set_bit(index, storage->used_index);
-
-            printk(KERN_NOTICE "%s: FLSAlloc() retruning FLS index %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
-
-            if (copy_to_user((void *) arg, (void *) &index, sizeof(long)))
-            {
-                printk(KERN_NOTICE "%s:  FlsAlloc() cannot return index\n", KBUILD_MODNAME);
-                clear_bit(index, storage->used_index);
-                return -EFAULT;
-            } 
-            return 0;
-        }
-        else
-            return -ENOTTY;
+        printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
+        process->fls = kzalloc(sizeof(struct fls_struct), GFP_KERNEL);
+        process->fls->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
+        process->fls->size = 0;
+        process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL);
     }
+            
+    storage = process->fls;
+    index = find_first_zero_bit(storage->used_index, MAX_FLS_INDEX);   
+            
+    printk(KERN_NOTICE "%s: FLSAlloc() FLS index is %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
 
-    return -ENOTTY;
+    if (index < MAX_FLS_INDEX) 
+    {
+        storage->size += 1;
+        set_bit(index, storage->used_index);
+
+        printk(KERN_NOTICE "%s: FLSAlloc() retruning FLS index %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
+
+        if (copy_to_user((void *) arg, (void *) &index, sizeof(long)))
+        {
+            printk(KERN_NOTICE "%s:  FlsAlloc() cannot return index\n", KBUILD_MODNAME);
+            clear_bit(index, storage->used_index);
+            return -EFAULT;
+        } 
+        
+        return 0;
+        
+    }    
+    else
+        return -ENOTTY;
+
 }
 
 long _ioctl_free(struct module_hashtable *hashtable, long* arg) 
@@ -360,31 +367,29 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
 
     process = find_process(hashtable, tgid);
     
-    if (process != NULL)
-    {
-        if (process->fls == NULL) 
-        {   
-            printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
-            return -ENOTTY;
-        }
+    if (!process)
+        return -ENOTTY;
 
-        if (copy_from_user((void *) &index, (void *) arg, sizeof(long)))
-        {
-            return -EFAULT;
-        }
-
-        storage = process->fls;
-        if (index > MAX_FLS_INDEX) 
-        {
-            printk(KERN_NOTICE "%s: FLSFree() FLSFree on invalid index for process %d\n", KBUILD_MODNAME, tgid);
-            return -ENOTTY;
-        }
-
-        clear_bit(index, storage->used_index);
-        return 0;
+    if (process->fls == NULL) 
+    {   
+        printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
+        return -ENOTTY;
     }
 
-    return -ENOTTY;
+    if (copy_from_user((void *) &index, (void *) arg, sizeof(long)))
+    {
+        return -EFAULT;
+    }
+
+    storage = process->fls;
+    if (index > MAX_FLS_INDEX) 
+    {
+        printk(KERN_NOTICE "%s: FLSFree() FLSFree on invalid index for process %d\n", KBUILD_MODNAME, tgid);
+        return -ENOTTY;
+    }
+
+    clear_bit(index, storage->used_index);
+    return 0;    
 }
 
 long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args) 
@@ -402,52 +407,53 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     
     process = find_process(hashtable, tgid);
     
-    if (process != NULL)
+    if (!process)
     {
-        if (process->fls == NULL) 
-        {   
-            printk(KERN_NOTICE "%s: FLSGet() fls not initialized for process %d\n", KBUILD_MODNAME, tgid);
-            return -ENOTTY;
-        }
+        printk(KERN_NOTICE "%s: FLSGet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
+        return -ENOTTY;
+    }
 
-        ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
-        if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
+    if (process->fls == NULL) 
+    {   
+        printk(KERN_NOTICE "%s: FLSGet() fls not initialized for process %d\n", KBUILD_MODNAME, tgid);
+        return -ENOTTY;
+    }
+
+    ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
+    if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
+    {   
+        kfree(ret);
+        return -EFAULT;
+    }
+
+    storage = process->fls;
+
+    if ((ret->index) > MAX_FLS_INDEX)
+    {   
+        printk(KERN_NOTICE "%s: FLSGet() fls accessing invalid index for process %d\n", KBUILD_MODNAME, tgid);
+        kfree(ret);
+        return -ENOTTY;
+    }
+
+    if (test_bit(ret->index, storage->used_index))
+    {
+        ret->value = storage->fls[ret->index];
+        printk(KERN_NOTICE "%s: FLSGet() fls accessing index for process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
+        if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
         {   
+            printk(KERN_NOTICE "%s: FLSGet() cannot return for process %d\n", KBUILD_MODNAME, tgid);
             kfree(ret);
             return -EFAULT;
         }
-
-        storage = process->fls;
-
-        if ((ret->index) > MAX_FLS_INDEX)
-        {   
-            printk(KERN_NOTICE "%s: FLSGet() fls accessing invalid index for process %d\n", KBUILD_MODNAME, tgid);
-            kfree(ret);
-            return -ENOTTY;
-        }
-
-        if (test_bit(ret->index, storage->used_index))
-        {
-            ret->value = storage->fls[ret->index];
-            printk(KERN_NOTICE "%s: FLSGet() fls accessing index for process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
-            if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
-            {   
-                printk(KERN_NOTICE "%s: FLSGet() cannot return for process %d\n", KBUILD_MODNAME, tgid);
-                kfree(ret);
-                return -EFAULT;
-            }
-            kfree(ret);
-            return 0;
-        }
-        else
-        {
-            kfree(ret);
-            return -ENOTTY;
-        }
+        kfree(ret);
+        return 0;
+    }
+    else
+    {
+        kfree(ret);
+        return -ENOTTY;
     }
     
-    printk(KERN_NOTICE "%s: FLSGet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
-    return -ENOTTY;
 }
 
 long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args) 
@@ -465,46 +471,47 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     
     process = find_process(hashtable, tgid);
     
-    if (process != NULL)
+    if (!process) 
     {
-        if (process->fls == NULL) 
-        {   
-            printk(KERN_NOTICE "%s: FLSSet() fls not initialized for process %d\n", KBUILD_MODNAME, tgid);
-            return -ENOTTY;
-        }
+        printk(KERN_NOTICE "%s: FLSSet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
+        return -ENOTTY;
+    }
 
-        ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
-        if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
-        {   
-            kfree(ret);
-            return -EFAULT;
-        }
+    if (process->fls == NULL) 
+    {   
+        printk(KERN_NOTICE "%s: FLSSet() fls not initialized for process %d\n", KBUILD_MODNAME, tgid);
+        return -ENOTTY;
+    }
 
-        storage = process->fls;
+    ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
+    if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
+    {   
+        kfree(ret);
+        return -EFAULT;
+    }
 
-        if ((ret->index) > MAX_FLS_INDEX)
-        {   
-            printk(KERN_NOTICE "%s: FLSSet() fls accessing invalud index for process %d\n", KBUILD_MODNAME, tgid);
-            kfree(ret);
-            return -ENOTTY;
-        }
+    storage = process->fls;
 
-        if (test_bit(ret->index, storage->used_index))
-        {   
-           printk(KERN_NOTICE "%s: FLSSet() process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
-           storage->fls[ret->index] = ret->value;
-           kfree(ret);
-           return 0;
-        }
-        else
-        {
-            kfree(ret);
-            return -ENOTTY;
-        }
+    if ((ret->index) > MAX_FLS_INDEX)
+    {   
+        printk(KERN_NOTICE "%s: FLSSet() fls accessing invalud index for process %d\n", KBUILD_MODNAME, tgid);
+        kfree(ret);
+        return -ENOTTY;
+    }
+
+    if (test_bit(ret->index, storage->used_index))
+    {   
+        printk(KERN_NOTICE "%s: FLSSet() process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
+        storage->fls[ret->index] = ret->value;
+        kfree(ret);
+        return 0;
+    }
+    else
+    {
+        kfree(ret);
+        return -ENOTTY;
     }
     
-    printk(KERN_NOTICE "%s: FLSSet() Not fiber context process %d\n", KBUILD_MODNAME, tgid);
-    return -ENOTTY;
 }
 
 /*
