@@ -11,7 +11,7 @@
 /*
  * Function to find process in hashtable
  * */
-static inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
+inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
 {
     struct process_active *ret;
     hash_for_each_possible(hashtable->htable, ret, next, tgid)
@@ -113,7 +113,11 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     hash_add(hashtable->htable, &process->next, tgid);
 
     //FLS
-    process->fls = NULL;
+    process->fls = kmalloc(sizeof(struct fls_struct), GFP_KERNEL);
+    spin_lock_init(&(process->fls->fls_lock));
+    process->fls->size = -1;
+    process->fls->fls = NULL;
+    process->fls->used_index = NULL;
     
     printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info allocated\n", KBUILD_MODNAME, pid);
 
@@ -313,21 +317,17 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     if (!process)
         return -ENOTTY;
 
-    // lock process
-    if (process->fls == NULL) 
-    {
-        printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
-        process->fls = kzalloc(sizeof(struct fls_struct), GFP_KERNEL);
-        spin_lock_init(&(process->fls->fls_lock));
-        process->fls->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
-        process->fls->size = 0;
-        process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL);
-    }
-    //unlock process
-            
     storage = process->fls;
 
     spin_lock(&storage->fls_lock);
+
+    if (storage->fls == NULL) 
+    {
+        printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
+        storage->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
+        storage->size = 0;
+        storage->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL);
+    }
 
     index = find_first_zero_bit(storage->used_index, MAX_FLS_INDEX);   
             
