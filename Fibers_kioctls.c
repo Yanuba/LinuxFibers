@@ -94,7 +94,7 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
             fiber = hlist_entry(cursor, struct fiber_struct, next);
             if (fiber->parent_thread == pid) 
             {
-                printk(KERN_NOTICE "%s: ConvertThreadToFiber() Thread %d is alrady a fiber\n", KBUILD_MODNAME, tgid);
+                printk(KERN_NOTICE "%s: ConvertThreadToFiber() Thread %d is already a fiber\n", KBUILD_MODNAME, tgid);
                 return -ENOTTY;
             }
         }
@@ -125,7 +125,7 @@ ALLOCATE_FIBER:
     fiber = allocate_fiber(process->next_fid++, current, NULL, NULL, NULL);
     hlist_add_head(&(fiber->next), &(process->running_fibers));
   
-    if (copy_to_user((void *) arg, (void *) &fiber->fiber_id,sizeof(fiber_t))) 
+    if (copy_to_user((void *) arg, (void *) &fiber->fiber_id, sizeof(fiber_t))) 
     {
         printk(KERN_NOTICE "%s: ConvertThreadToFiber() cannot return fiber id\n", KBUILD_MODNAME);
         hlist_del(&fiber->next);
@@ -147,7 +147,7 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     struct process_active   *process;
     struct fiber_struct     *fiber;
 
-    struct fiber_args       *usr_buf;   //buffer to communicate with usersace
+    struct fiber_args       *usr_buf;   //buffer to communicate with userspace
 
     pid_t tgid; 
     pid_t pid;
@@ -196,7 +196,9 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
 }
 
 /*
- * Need a review
+ * Need a review - need stron memory barriers
+ * RCU maybe is not suitable since we don't want that in some moment
+ * a fiber keep existing as a copy in some other thread
  * */
 long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next) 
 {
@@ -313,7 +315,6 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     printk(KERN_NOTICE "%s: FLSAlloc() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
 
     process = find_process(hashtable, tgid);
-    
     if (!process)
         return -ENOTTY;
 
@@ -326,7 +327,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
         printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
         storage->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
         storage->size = 0;
-        storage->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL);
+        storage->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL); //1 page
     }
 
     index = find_first_zero_bit(storage->used_index, MAX_FLS_INDEX);   

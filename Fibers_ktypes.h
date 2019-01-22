@@ -30,7 +30,8 @@ struct module_hashtable
  * We have an array dynamically allocated for fls
  * and we use a bitmask to identify whether an index is available or not.
  * */
-struct fls_struct {
+struct fls_struct 
+{
     spinlock_t fls_lock;            // spinlock to fls (spin_lock(&lock), spin_unlock(&lock))
     unsigned long   size;           // number of index used
     long long       *fls;           // fls array
