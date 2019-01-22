@@ -8,12 +8,20 @@
 
 #include "Fibers_kioctls.h"
 
+
 /*
- * To save fpu state try with:
- * copy_fxregs_to_kernel(sstruct fpu *fpu)
- * To restore fpu state use: 
- * copy_kernel_to_fxregs(struct fxregs_state *fx)
+ * Function to find process in hashtable
  * */
+inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
+{
+    struct process_active *ret;
+    hash_for_each_possible(hashtable->htable, ret, next, tgid)
+    {
+        if (ret->tgid == tgid)
+            return ret;
+    }
+    return NULL;
+}
 
 struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void* (entry_point)(void*), void* args, void* stack_base) 
 {
@@ -77,13 +85,9 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    hash_for_each_possible(hashtable->htable, process, next, tgid)
-    {
-        if (process->tgid == tgid)
-            break;
-    }
-
-    if (process != NULL && process->tgid == tgid) 
+    process = find_process(hashtable, tgid);
+    
+    if (process != NULL) 
     { 
         printk(KERN_NOTICE "%s: ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
         hlist_for_each(cursor, &process->running_fibers) 
@@ -148,13 +152,9 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    hash_for_each_possible(hashtable->htable, process, next, tgid) 
-    {
-        if (process->tgid == tgid)
-            break;
-    }
-
-    if (process != NULL && process->tgid == tgid)
+    process = find_process(hashtable, tgid);
+    
+    if (process != NULL)
     {
         printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, pid);
         usr_buf = (struct fiber_args *) kmalloc(sizeof(struct fiber_args), GFP_KERNEL);
@@ -304,13 +304,9 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 
     printk(KERN_NOTICE "%s: FLSAlloc() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
 
-    hash_for_each_possible(hashtable->htable, process, next, tgid) 
-    {
-        if (process->tgid == tgid) 
-            break;
-    }
-
-    if (process != NULL && process->tgid == tgid)
+    process = find_process(hashtable, tgid);
+    
+    if (process != NULL)
     {
         if (process->fls == NULL) 
         {
@@ -363,13 +359,9 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
 
     printk(KERN_NOTICE "%s: FLSFree() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
 
-    hash_for_each_possible(hashtable->htable, process, next, tgid) 
-    {
-        if (process->tgid == tgid)
-            break;
-    }
-
-    if (process != NULL && process->tgid == tgid)
+    process = find_process(hashtable, tgid);
+    
+    if (process != NULL)
     {
         if (process->fls == NULL) 
         {   
@@ -409,13 +401,9 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
-    hash_for_each_possible(hashtable->htable, process, next, tgid) 
-    {
-        if (process->tgid == tgid) 
-            break;
-    }
-
-    if (process != NULL && process->tgid == tgid)
+    process = find_process(hashtable, tgid);
+    
+    if (process != NULL)
     {
         if (process->fls == NULL) 
         {   
@@ -476,13 +464,9 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
-    hash_for_each_possible(hashtable->htable, process, next, tgid) 
-    {
-        if (process->tgid == tgid) 
-            break;
-    }
-
-    if (process != NULL && process->tgid == tgid)
+    process = find_process(hashtable, tgid);
+    
+    if (process != NULL)
     {
         if (process->fls == NULL) 
         {   
