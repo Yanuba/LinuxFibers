@@ -293,12 +293,8 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 {   
     struct process_active   *process;
     struct fls_struct       *storage;
-    
-    unsigned long last_bit;
-    unsigned long index;
 
-    unsigned long new_size; 
-    void* tmp;
+    unsigned long index;
 
     pid_t tgid;
     pid_t pid;
@@ -320,40 +316,17 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
         {
             printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
             process->fls = kzalloc(sizeof(struct fls_struct), GFP_KERNEL);
-            process->fls->current_size = process->next_fid < MAX_FLS_INDEX?process->next_fid : MAX_FLS_INDEX;
-            process->fls->fls = kvzalloc(sizeof(long long)* process->fls->current_size , GFP_KERNEL);
+            process->fls->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
             process->fls->size = 0;
-            process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(process->fls->current_size),GFP_KERNEL);
+            process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL);
         }
             
         storage = process->fls;
-        if (storage->size >= storage->current_size) 
-        {   
-            printk(KERN_NOTICE "%s: FLSAlloc() resizing FLS for process %d\n", KBUILD_MODNAME, tgid);
-            new_size = storage->current_size * 2 < MAX_FLS_INDEX? storage->current_size*2:MAX_FLS_INDEX;
-            last_bit = BITS_TO_LONGS(new_size);
-                
-            tmp = krealloc(storage->fls, sizeof(long long)*new_size, GFP_KERNEL);
-            if (!tmp)
-                return -ENOMEM;
-            
-            storage->fls = tmp;
-            
-            tmp = krealloc(storage->used_index, sizeof(unsigned long)*last_bit, GFP_KERNEL);
-            if (!tmp)
-                return -ENOMEM;
-            storage->used_index = tmp;
-            storage->current_size = new_size;
-        }
-
-        last_bit = storage->current_size;
-        printk(KERN_NOTICE "%s: FLSAlloc() last bit is %ld, for process %d\n", KBUILD_MODNAME, last_bit, tgid); 
-
-        index = find_first_zero_bit(storage->used_index, last_bit);   
+        index = find_first_zero_bit(storage->used_index, MAX_FLS_INDEX);   
             
         printk(KERN_NOTICE "%s: FLSAlloc() FLS index is %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
 
-        if (index < last_bit) 
+        if (index < MAX_FLS_INDEX) 
         {
             storage->size += 1;
             set_bit(index, storage->used_index);
@@ -410,7 +383,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
         }
 
         storage = process->fls;
-        if (index > storage->current_size) 
+        if (index > MAX_FLS_INDEX) 
         {
             printk(KERN_NOTICE "%s: FLSFree() FLSFree on invalid index for process %d\n", KBUILD_MODNAME, tgid);
             return -ENOTTY;
@@ -450,7 +423,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
             return -ENOTTY;
         }
 
-        ret = kvmalloc(sizeof(struct fls_args), GFP_KERNEL);
+        ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
         if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
         {   
             kfree(ret);
@@ -459,7 +432,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
 
         storage = process->fls;
 
-        if ((ret->index) > (storage->current_size))
+        if ((ret->index) > MAX_FLS_INDEX)
         {   
             printk(KERN_NOTICE "%s: FLSGet() fls accessing invalid index for process %d\n", KBUILD_MODNAME, tgid);
             kfree(ret);
@@ -517,7 +490,7 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
             return -ENOTTY;
         }
 
-        ret = kvmalloc(sizeof(struct fls_args), GFP_KERNEL);
+        ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
         if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
         {   
             kfree(ret);
@@ -526,7 +499,7 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
 
         storage = process->fls;
 
-        if ((ret->index) > (storage->current_size))
+        if ((ret->index) > MAX_FLS_INDEX)
         {   
             printk(KERN_NOTICE "%s: FLSSet() fls accessing invalud index for process %d\n", KBUILD_MODNAME, tgid);
             kfree(ret);

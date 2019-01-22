@@ -27,11 +27,10 @@ struct module_hashtable
 
 /*
  * Struct to handle the fls
- * We have a dynamic array for fls
+ * We have an array dynamically allocated for fls
  * and we use a bitmask to identify whether an index is available or not.
  * */
 struct fls_struct {
-    unsigned long   current_size;   // size of fls array 
     unsigned long   size;           // number of index used
     long long       *fls;           // fls array
     unsigned long   *used_index;    // bitmap for marking fls index allocated
