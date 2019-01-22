@@ -31,6 +31,7 @@ struct module_hashtable
  * and we use a bitmask to identify whether an index is available or not.
  * */
 struct fls_struct {
+    spinlock_t fls_lock;            // spinlock to fls
     unsigned long   size;           // number of index used
     long long       *fls;           // fls array
     unsigned long   *used_index;    // bitmap for marking fls index allocated

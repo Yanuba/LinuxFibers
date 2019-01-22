@@ -1,5 +1,4 @@
 #include <linux/slab.h>
-
 //for pt_regs
 #include <linux/ptrace.h>
 #include <linux/sched/task_stack.h>
@@ -314,16 +313,22 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     if (!process)
         return -ENOTTY;
 
+    // lock process
     if (process->fls == NULL) 
     {
         printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
         process->fls = kzalloc(sizeof(struct fls_struct), GFP_KERNEL);
+        spin_lock_init(&(process->fls->fls_lock));
         process->fls->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
         process->fls->size = 0;
         process->fls->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL);
     }
+    //unlock process
             
     storage = process->fls;
+
+    spin_lock(&storage->fls_lock);
+
     index = find_first_zero_bit(storage->used_index, MAX_FLS_INDEX);   
             
     printk(KERN_NOTICE "%s: FLSAlloc() FLS index is %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
@@ -339,15 +344,18 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
         {
             printk(KERN_NOTICE "%s:  FlsAlloc() cannot return index\n", KBUILD_MODNAME);
             clear_bit(index, storage->used_index);
+            spin_unlock(&storage->fls_lock);
             return -EFAULT;
         } 
-        
+        spin_unlock(&storage->fls_lock);
         return 0;
         
     }    
     else
+    {
+        spin_unlock(&storage->fls_lock);
         return -ENOTTY;
-
+    }
 }
 
 long _ioctl_free(struct module_hashtable *hashtable, long* arg) 
@@ -381,15 +389,20 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
         return -EFAULT;
     }
 
-    storage = process->fls;
     if (index > MAX_FLS_INDEX) 
     {
         printk(KERN_NOTICE "%s: FLSFree() FLSFree on invalid index for process %d\n", KBUILD_MODNAME, tgid);
         return -ENOTTY;
     }
 
+    storage = process->fls;
+
+    spin_lock(&storage->fls_lock);
     clear_bit(index, storage->used_index);
-    return 0;    
+    spin_unlock(&storage->fls_lock);
+    
+    return 0; 
+       
 }
 
 long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args) 
@@ -426,8 +439,6 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         return -EFAULT;
     }
 
-    storage = process->fls;
-
     if ((ret->index) > MAX_FLS_INDEX)
     {   
         printk(KERN_NOTICE "%s: FLSGet() fls accessing invalid index for process %d\n", KBUILD_MODNAME, tgid);
@@ -435,6 +446,9 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         return -ENOTTY;
     }
 
+    storage = process->fls;
+    spin_lock(&storage->fls_lock);
+    
     if (test_bit(ret->index, storage->used_index))
     {
         ret->value = storage->fls[ret->index];
@@ -442,18 +456,21 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
         {   
             printk(KERN_NOTICE "%s: FLSGet() cannot return for process %d\n", KBUILD_MODNAME, tgid);
+            spin_unlock(&storage->fls_lock);
             kfree(ret);
             return -EFAULT;
         }
+        spin_unlock(&storage->fls_lock);
         kfree(ret);
         return 0;
     }
     else
-    {
+    {   
+        spin_unlock(&storage->fls_lock);
         kfree(ret);
         return -ENOTTY;
     }
-    
+
 }
 
 long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args) 
@@ -490,8 +507,6 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
         return -EFAULT;
     }
 
-    storage = process->fls;
-
     if ((ret->index) > MAX_FLS_INDEX)
     {   
         printk(KERN_NOTICE "%s: FLSSet() fls accessing invalud index for process %d\n", KBUILD_MODNAME, tgid);
@@ -499,19 +514,24 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
         return -ENOTTY;
     }
 
+    storage = process->fls;
+
+    spin_lock(&storage->fls_lock);
+
     if (test_bit(ret->index, storage->used_index))
     {   
         printk(KERN_NOTICE "%s: FLSSet() process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
         storage->fls[ret->index] = ret->value;
+        spin_unlock(&storage->fls_lock);
         kfree(ret);
         return 0;
     }
     else
-    {
+    {   
+        spin_unlock(&storage->fls_lock);
         kfree(ret);
         return -ENOTTY;
     }
-    
 }
 
 /*
