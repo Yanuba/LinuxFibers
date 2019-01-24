@@ -4,12 +4,14 @@
 #include <linux/sched/task_stack.h>
 //for fpu
 #include <asm/fpu/internal.h>
+//for bitmaps
+#include <linux/bitmap.h>
 
 #include "Fibers_kioctls.h"
 
 
 /*
- * Function to find process in hashtable
+ * Function to find process in hashtable -> convert it into a macro
  * */
 inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
 {
@@ -196,7 +198,7 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
 }
 
 /*
- * Need a review - need stron memory barriers
+ * Need a review - need strong memory barriers
  * RCU maybe is not suitable since we don't want that in some moment
  * a fiber keep existing as a copy in some other thread
  * */
@@ -327,14 +329,14 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
         printk(KERN_NOTICE "%s: FLSAlloc() No FLS for process %d\n", KBUILD_MODNAME, tgid);
         storage->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
         storage->size = 0;
-        storage->used_index = kvzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL); //1 page
+        storage->used_index = kzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL); //1 page
     }
 
     index = find_first_zero_bit(storage->used_index, MAX_FLS_INDEX);   
             
     printk(KERN_NOTICE "%s: FLSAlloc() FLS index is %ld, for process %d\n", KBUILD_MODNAME, index,tgid); 
 
-    if (index < MAX_FLS_INDEX) 
+    if (index < MAX_FLS_INDEX && storage->size < MAX_FLS_INDEX) 
     {
         storage->size += 1;
         set_bit(index, storage->used_index);
@@ -379,12 +381,6 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     if (!process)
         return -ENOTTY;
 
-    if (process->fls == NULL) 
-    {   
-        printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
-        return -ENOTTY;
-    }
-
     if (copy_from_user((void *) &index, (void *) arg, sizeof(long)))
     {
         return -EFAULT;
@@ -399,7 +395,14 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     storage = process->fls;
 
     spin_lock(&storage->fls_lock);
+    
+    if (storage->fls == NULL || storage->used_index == NULL) {
+        printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
+        return -ENOTTY;
+    }
+    storage->size -= 1;
     clear_bit(index, storage->used_index);
+    
     spin_unlock(&storage->fls_lock);
     
     return 0; 

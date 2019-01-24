@@ -22,7 +22,7 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
-//use macros to extrac arg sizes in IOCTL function (They exists for some reason)
+//use macros to extract arg sizes in IOCTL function (They exists for some reason)
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
