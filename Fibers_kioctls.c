@@ -350,6 +350,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
         if (copy_to_user((void *) arg, (void *) &index, sizeof(long)))
         {
             printk(KERN_NOTICE "%s:  FlsAlloc() cannot return index\n", KBUILD_MODNAME);
+            storage->size -= 1;
             clear_bit(index, storage->used_index);
             spin_unlock_irqrestore(&storage->fls_lock, flags);
             return -EFAULT;
