@@ -4,8 +4,6 @@
 #include <linux/sched/task_stack.h>
 //for fpu
 #include <asm/fpu/internal.h>
-//for bitmaps
-#include <linux/bitmap.h>
 
 #include "Fibers_kioctls.h"
 
@@ -83,6 +81,8 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     pid_t tgid; 
     pid_t pid;
     
+    printk(KERN_NOTICE KBUILD_MODNAME ":ConvertThreadToFiber() Enter");
+
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
@@ -155,6 +155,8 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     pid_t tgid; 
     pid_t pid;
     
+    printk(KERN_NOTICE KBUILD_MODNAME ":CreateFiber() Enter");
+
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
@@ -306,7 +308,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     return -ENOTTY;
 }  
 
-
+//
 long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 {   
     struct process_active   *process;
@@ -359,6 +361,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
             return -EFAULT;
         } 
         spin_unlock_irqrestore(&storage->fls_lock, flags);
+        printk(KERN_NOTICE KBUILD_MODNAME ":FlsAlloc() Exit Success");
         return 0;
         
     }    
@@ -414,6 +417,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     
     spin_unlock_irqrestore(&storage->fls_lock, flags);
     
+    printk(KERN_NOTICE KBUILD_MODNAME ":FLSFree() Exit Success");
     return 0; 
        
 }
@@ -433,6 +437,8 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
+    printk(KERN_NOTICE KBUILD_MODNAME ":FLSGet() Enter");
+
     process = find_process(hashtable, tgid);
     
     if (!process)
@@ -477,6 +483,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         }
         spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
+        printk(KERN_NOTICE KBUILD_MODNAME ":FLSGet() Exit Success");
         return 0;
     }
     else
@@ -503,6 +510,8 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
+    printk(KERN_NOTICE KBUILD_MODNAME ":FLSSet() Enter");
+
     process = find_process(hashtable, tgid);
     
     if (!process) 
@@ -541,6 +550,7 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
         storage->fls[ret->index] = ret->value;
         spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
+        printk(KERN_NOTICE KBUILD_MODNAME ":FLSSet() Exit Success");
         return 0;
     }
     else
