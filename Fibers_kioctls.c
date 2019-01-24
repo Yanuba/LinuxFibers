@@ -108,7 +108,7 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     //New struct for process info
     process = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
     process->tgid = tgid;
-    process->next_fid = 1;
+    process->next_fid = 0;
     INIT_HLIST_HEAD(&process->running_fibers);
     INIT_HLIST_HEAD(&process->waiting_fibers);
     INIT_HLIST_NODE(&process->next);
@@ -284,6 +284,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
                 switch_next->activations += 1;
                 switch_next->status = FIBER_RUNNING;
+                switch_next->thread_on = pid;
                 switch_prev->status = FIBER_WAITING;
 
                 hlist_del(&(switch_next->next));
@@ -293,6 +294,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
                 hlist_add_head(&(switch_next->next), &(process->running_fibers));
 
                 preempt_enable();
+
+                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Success\n", KBUILD_MODNAME, pid);
 
                 return 0;
 

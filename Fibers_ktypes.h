@@ -38,10 +38,13 @@ struct fls_struct
     unsigned long   *used_index;    // bitmap for marking fls index allocated
 };
 
+/*
+ * This will be destroyed only when one of the fibers/thread/(someone) call exit()
+ * */
 struct process_active 
 {
     pid_t tgid;                         //process id
-    pid_t next_fid;                     //will be next fiber id                        
+    pid_t next_fid;                     //will be next fiber id - this is a weakpoint                       
     struct hlist_head running_fibers;   //running fibers of the process
     struct hlist_head waiting_fibers;   //waiting fibers of the process
     struct hlist_node next;             //other process in the bucket
