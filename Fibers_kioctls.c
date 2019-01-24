@@ -24,7 +24,7 @@ inline struct process_active* find_process(struct module_hashtable *hashtable, p
     return NULL;
 }
 
-struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void* (entry_point)(void*), void* args, void* stack_base) 
+struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
 {
         struct fiber_struct* fiber;
 
@@ -112,7 +112,6 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     INIT_HLIST_HEAD(&process->running_fibers);
     INIT_HLIST_HEAD(&process->waiting_fibers);
     INIT_HLIST_NODE(&process->next);
-    hash_add(hashtable->htable, &process->next, tgid);
 
     //FLS
     process->fls = kmalloc(sizeof(struct fls_struct), GFP_KERNEL);
@@ -121,6 +120,8 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     process->fls->fls = NULL;
     process->fls->used_index = NULL;
     
+    hash_add(hashtable->htable, &process->next, tgid);
+
     printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d: new process info allocated\n", KBUILD_MODNAME, pid);
 
 ALLOCATE_FIBER:

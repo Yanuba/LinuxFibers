@@ -9,7 +9,7 @@
  ********************/
 fiber_t* fib;
 
-void * thread_routine2(void* arg) {
+void thread_routine2(void* arg) {
     printf("FIIIIIIIIIIIIIBER\n");
     
     double l1 = 96;
@@ -43,7 +43,7 @@ void * thread_routine2(void* arg) {
 
 }
 
-void * thread_routine(void* arg) {
+void* thread_routine(void* arg) {
     fib = ConvertThreadToFiber();
     //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib);
     fiber_t* fib2 = ConvertThreadToFiber();

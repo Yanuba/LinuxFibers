@@ -51,7 +51,7 @@ void *ConvertThreadToFiber()
  * In case if success an identifier for the new fiber is returned.
  * In case of failure a non vaild fiber identifier is returend, all calls on it will fail.
  * */
-void *CreateFiber(size_t stack_size, void *(*routine)(void *), void *args) 
+void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args) 
 {
     int                 ret;
     fiber_t             *id;

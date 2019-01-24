@@ -59,7 +59,7 @@ struct fiber_struct
 
     /* Fields to be exposed in proc */
     short   status;                 //The fiber is running or not?
-    void*   (*entry_point)(void*);  //entry point of the fiber (EIP)
+    void   (*entry_point)(void*);  //entry point of the fiber (EIP)
     pid_t   parent_process;         //key in the hash table
     pid_t   parent_thread;          //pid of the thread that created the fiber
     int     activations;            //the number of current activations of the Fiber
