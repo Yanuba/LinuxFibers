@@ -7,7 +7,11 @@
 
 #include "Fibers_kioctls.h"
 
+// somewhere we are passing an invalid address that is used userspace
 
+#define printk_msg(str, ...) do { \
+    printk(KERN_NOTICE KBUILD_MODNAME ": " str,##__VA_ARGS__); \
+                            } while(0);
 /*
  * Function to find process in hashtable -> convert it into a macro
  * */
@@ -81,22 +85,22 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     pid_t tgid; 
     pid_t pid;
     
-    printk(KERN_NOTICE KBUILD_MODNAME ":ConvertThreadToFiber() Enter");
-
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
+    
+    printk_msg("[%d, %d] ConvertThreadToFiber() ENTER", tgid, pid);
 
     process = find_process(hashtable, tgid);
     
     if (process) 
-    { 
-        printk(KERN_NOTICE "%s: ConvertThreadToFiber() Process %d is activated\n", KBUILD_MODNAME, tgid);
+    {   
+        printk_msg("[%d, %d] ConvertThreadToFiber() Process Active", tgid, pid);
         hlist_for_each(cursor, &process->running_fibers) 
         {
             fiber = hlist_entry(cursor, struct fiber_struct, next);
             if (fiber->parent_thread == pid) 
-            {
-                printk(KERN_NOTICE "%s: ConvertThreadToFiber() Thread %d is already a fiber\n", KBUILD_MODNAME, tgid);
+            {   
+                printk_msg("[%d, %d] ConvertThreadToFiber() Thread already fiber, EXIT", tgid, pid);
                 return -ENOTTY;
             }
         }
@@ -136,8 +140,8 @@ ALLOCATE_FIBER:
         //If the first call of a process fails here, we can create fiber even if we are not in a fiber context
         return -EFAULT;
     }
- 
-    printk(KERN_NOTICE "%s: Thread %d, ConvertThreadToFiber() was succesful, exiting...\n", KBUILD_MODNAME, pid); 
+    
+    printk_msg("[%d, %d] ConvertThreadToFiber() EXIT SUCCESS", tgid, pid);
     return 0;
 }
 
@@ -155,10 +159,10 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     pid_t tgid; 
     pid_t pid;
     
-    printk(KERN_NOTICE KBUILD_MODNAME ":CreateFiber() Enter");
-
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
+
+    printk_msg("[%d, %d] CreateFiber() ENTER", tgid, pid);
 
     process = find_process(hashtable, tgid);
     
@@ -195,7 +199,7 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     }
 
     kfree(usr_buf);
-    printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Exiting succesfully\n", KBUILD_MODNAME, pid);
+    printk_msg("[%d, %d] CreateFiber() EXIT SUCCESS", tgid, pid);
     return 0;
     
 }
@@ -224,7 +228,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
+    printk_msg("[%d, %d] SwitchToFiber() ENTER", tgid, pid);
 
     id_next = (fiber_t *) kmalloc(sizeof(fiber_t), GFP_KERNEL);
 
@@ -297,8 +301,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
                 preempt_enable();
 
-                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Success\n", KBUILD_MODNAME, pid);
-
+                printk_msg("[%d, %d] SwitchToFiber() EXIT SUCCESS", tgid, pid);
                 return 0;
 
             }
@@ -323,8 +326,8 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    printk(KERN_NOTICE "%s: FLSAlloc() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
-
+    printk_msg("[%d, %d] FLSAlloc() ENTER", tgid, pid);
+    
     process = find_process(hashtable, tgid);
     if (!process)
         return -ENOTTY;
@@ -361,7 +364,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
             return -EFAULT;
         } 
         spin_unlock_irqrestore(&storage->fls_lock, flags);
-        printk(KERN_NOTICE KBUILD_MODNAME ":FlsAlloc() Exit Success");
+        printk_msg("[%d, %d] FLSAlloc() EXIT SUCCESS", tgid, pid);
         return 0;
         
     }    
@@ -386,8 +389,8 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    printk(KERN_NOTICE "%s: FLSFree() called by thread %d of process %d\n", KBUILD_MODNAME, pid, tgid);
-
+    printk_msg("[%d, %d] FLSFree() ENTER", tgid, pid);
+    
     process = find_process(hashtable, tgid);
     
     if (!process)
@@ -417,7 +420,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     
     spin_unlock_irqrestore(&storage->fls_lock, flags);
     
-    printk(KERN_NOTICE KBUILD_MODNAME ":FLSFree() Exit Success");
+    printk_msg("[%d, %d] FLSFree() EXIT SUCCESS", tgid, pid);
     return 0; 
        
 }
@@ -437,7 +440,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
-    printk(KERN_NOTICE KBUILD_MODNAME ":FLSGet() Enter");
+    printk_msg("[%d, %d] FLSGet() ENTER", tgid, pid);
 
     process = find_process(hashtable, tgid);
     
@@ -483,7 +486,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         }
         spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
-        printk(KERN_NOTICE KBUILD_MODNAME ":FLSGet() Exit Success");
+        printk_msg("[%d, %d] FLSGet() EXIT SUCCESS", tgid, pid);
         return 0;
     }
     else
@@ -510,8 +513,8 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
-    printk(KERN_NOTICE KBUILD_MODNAME ":FLSSet() Enter");
-
+    printk_msg("[%d, %d] FLSSet() ENTER", tgid, pid);
+    
     process = find_process(hashtable, tgid);
     
     if (!process) 
@@ -550,7 +553,7 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
         storage->fls[ret->index] = ret->value;
         spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
-        printk(KERN_NOTICE KBUILD_MODNAME ":FLSSet() Exit Success");
+        printk_msg("[%d, %d] FLSSet() EXIT SUCCESS", tgid, pid);
         return 0;
     }
     else
