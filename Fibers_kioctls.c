@@ -273,12 +273,13 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
             {
                 //do context switch
                 preempt_disable();
+                
                 printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
                 copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
                 (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
                 (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
                 copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
-                preempt_enable();
+                
 
                 switch_next->activations += 1;
                 switch_next->status = FIBER_RUNNING;
@@ -289,14 +290,15 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
                 hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
                 hlist_add_head(&(switch_next->next), &(process->running_fibers));
-                        
+
+                preempt_enable();
+
                 return 0;
 
             }
         }
     }
 
-    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Failed, since not running in fiber context\n", KBUILD_MODNAME, pid);
     return -ENOTTY;
 }  
 
@@ -307,6 +309,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     struct fls_struct       *storage;
 
     unsigned long index;
+    unsigned long flags;
 
     pid_t tgid;
     pid_t pid;
@@ -322,7 +325,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 
     storage = process->fls;
 
-    spin_lock(&storage->fls_lock);
+    spin_lock_irqsave(&storage->fls_lock, flags);
 
     if (storage->fls == NULL) 
     {
@@ -347,16 +350,16 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
         {
             printk(KERN_NOTICE "%s:  FlsAlloc() cannot return index\n", KBUILD_MODNAME);
             clear_bit(index, storage->used_index);
-            spin_unlock(&storage->fls_lock);
+            spin_unlock_irqrestore(&storage->fls_lock, flags);
             return -EFAULT;
         } 
-        spin_unlock(&storage->fls_lock);
+        spin_unlock_irqrestore(&storage->fls_lock, flags);
         return 0;
         
     }    
     else
     {
-        spin_unlock(&storage->fls_lock);
+        spin_unlock_irqrestore(&storage->fls_lock, flags);
         return -ENOTTY;
     }
 }
@@ -367,6 +370,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     struct fls_struct       *storage;
 
     unsigned long           index;
+    unsigned long           flags;
 
     pid_t tgid;
     pid_t pid;
@@ -394,7 +398,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
 
     storage = process->fls;
 
-    spin_lock(&storage->fls_lock);
+    spin_lock_irqsave(&storage->fls_lock, flags);
     
     if (storage->fls == NULL || storage->used_index == NULL) {
         printk(KERN_NOTICE "%s: FLSFree() No FLS for process %d\n", KBUILD_MODNAME, tgid);
@@ -403,7 +407,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     storage->size -= 1;
     clear_bit(index, storage->used_index);
     
-    spin_unlock(&storage->fls_lock);
+    spin_unlock_irqrestore(&storage->fls_lock, flags);
     
     return 0; 
        
@@ -415,6 +419,8 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     struct fls_struct       *storage;
     
     struct fls_args           *ret;
+
+    unsigned long flags;
 
     pid_t tgid;
     pid_t pid;
@@ -451,7 +457,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     }
 
     storage = process->fls;
-    spin_lock(&storage->fls_lock);
+    spin_lock_irqsave(&storage->fls_lock, flags);
     
     if (test_bit(ret->index, storage->used_index))
     {
@@ -460,17 +466,17 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
         {   
             printk(KERN_NOTICE "%s: FLSGet() cannot return for process %d\n", KBUILD_MODNAME, tgid);
-            spin_unlock(&storage->fls_lock);
+            spin_unlock_irqrestore(&storage->fls_lock, flags);
             kfree(ret);
             return -EFAULT;
         }
-        spin_unlock(&storage->fls_lock);
+        spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
         return 0;
     }
     else
     {   
-        spin_unlock(&storage->fls_lock);
+        spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
         return -ENOTTY;
     }
@@ -483,6 +489,8 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     struct fls_struct       *storage;
     
     struct fls_args           *ret;
+
+    unsigned long flags;
 
     pid_t tgid;
     pid_t pid;
@@ -520,19 +528,19 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
 
     storage = process->fls;
 
-    spin_lock(&storage->fls_lock);
+    spin_lock_irqsave(&storage->fls_lock, flags);
 
     if (test_bit(ret->index, storage->used_index))
     {   
         printk(KERN_NOTICE "%s: FLSSet() process %d, value %lld\n", KBUILD_MODNAME, tgid, ret->value);
         storage->fls[ret->index] = ret->value;
-        spin_unlock(&storage->fls_lock);
+        spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
         return 0;
     }
     else
     {   
-        spin_unlock(&storage->fls_lock);
+        spin_unlock_irqrestore(&storage->fls_lock, flags);
         kfree(ret);
         return -ENOTTY;
     }

@@ -54,8 +54,6 @@ void * thread_routine(void* arg) {
     unsigned long idx = FlsAlloc();
     printf("! Got fls index: %ld\n", idx);
     
-
-
     SwitchToFiber(fib2);
     printf("My pid is bacl from hell\n");
     SwitchToFiber(fib2);
