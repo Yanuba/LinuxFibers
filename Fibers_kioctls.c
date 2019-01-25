@@ -242,6 +242,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     hlist_for_each(list_cursor, &process->waiting_fibers) 
     {
         cursor = hlist_entry(list_cursor, struct fiber_struct, next);        
+
         if (cursor->fiber_id == id_next) 
         {
             switch_next = cursor;
@@ -251,6 +252,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     hlist_for_each(list_cursor, &process->running_fibers) 
     {
         cursor = hlist_entry(list_cursor, struct fiber_struct, next);
+
         if (cursor->fiber_id == id_next) 
         {   
             printk_msg("[%d, %d] SwitchToFiber() Trying to Switch to an active fiber", tgid, pid);
@@ -258,7 +260,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
             return -ENOTTY;
         }
       
-        if (cursor->thread_on == pid) 
+        else if (cursor->thread_on == pid) 
         {
             switch_prev = cursor;
             
@@ -282,7 +284,6 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
             hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
             hlist_add_head(&(switch_next->next), &(process->running_fibers));
-
             preempt_enable();
 
             printk_msg("[%d, %d] SwitchToFiber() EXIT SUCCESS", tgid, pid);

@@ -44,7 +44,7 @@ struct fls_struct
 struct process_active 
 {
     pid_t tgid;                         //process id
-    pid_t next_fid;                     //will be next fiber id - this is a weakpoint                       
+    pid_t next_fid;                     //will be next fiber id - this is a weakpoint (make it atomic?)                   
     struct hlist_head running_fibers;   //running fibers of the process
     struct hlist_head waiting_fibers;   //waiting fibers of the process
     struct hlist_node next;             //other process in the bucket
