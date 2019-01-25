@@ -213,7 +213,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     struct process_active   *process;
     struct hlist_node       *list_cursor;
 
-    fiber_t                 *id_next;
+    fiber_t                 id_next;
 
     pid_t tgid; 
     pid_t pid;
@@ -225,32 +225,24 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
     printk_msg("[%d, %d] SwitchToFiber() ENTER", tgid, pid);
 
-    id_next = (fiber_t *) kmalloc(sizeof(fiber_t), GFP_KERNEL);
-
-    if (copy_from_user((void *) id_next, (void *) usr_id_next, sizeof(fiber_t))) 
+    if (copy_from_user((void *) &id_next, (void *) usr_id_next, sizeof(fiber_t))) 
     {
-        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d Cannot copy input data\n", KBUILD_MODNAME, pid);
-        kfree(id_next);
+        printk_msg("[%d, %d] SwitchToFiber() Cannot Read Input EXIT", tgid, pid);
         return -EFAULT;
     }
-
-    printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, requested: %d\n", KBUILD_MODNAME, pid, *id_next);
 
     process = find_process(hashtable, tgid);
     
     if (!process) 
-    {
-        printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Failed, since not running in fiber context\n", KBUILD_MODNAME, pid);
+    {   
+        printk_msg("[%d, %d] SwitchToFiber() Not in Fiber Context EXIT", tgid, pid);
         return -ENOTTY;
     }
 
     hlist_for_each(list_cursor, &process->waiting_fibers) 
     {
-        cursor = hlist_entry(list_cursor, struct fiber_struct, next);
-                
-        printk(KERN_NOTICE "%s: SwitchToFiber() WAITING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
-                
-        if (cursor->fiber_id == *id_next) 
+        cursor = hlist_entry(list_cursor, struct fiber_struct, next);        
+        if (cursor->fiber_id == id_next) 
         {
             switch_next = cursor;
         }
@@ -259,50 +251,47 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     hlist_for_each(list_cursor, &process->running_fibers) 
     {
         cursor = hlist_entry(list_cursor, struct fiber_struct, next);
-
-        printk(KERN_NOTICE "%s: SwitchToFiber() RUNNING span %d\n", KBUILD_MODNAME, cursor->fiber_id);
-
-        if (cursor->fiber_id == *id_next) 
-        {
-            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Trying to switch to an active fiber\n", KBUILD_MODNAME, pid);
+        if (cursor->fiber_id == id_next) 
+        {   
+            printk_msg("[%d, %d] SwitchToFiber() Trying to Switch to an active fiber", tgid, pid);
             cursor->failed_activations += 1;
             return -ENOTTY;
         }
-        else if (cursor->thread_on == pid) 
+      
+        if (cursor->thread_on == pid) 
         {
             switch_prev = cursor;
-            if (switch_next != NULL) 
-            {
-                //do context switch
-                preempt_disable();
+            
+            //do context switch
                 
-                printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
-                copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
-                (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
-                (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
-                copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
+            preempt_disable();
+            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
+            copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
+            (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
+            (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
+            copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
                 
+            switch_next->activations += 1;
+            switch_next->thread_on = pid;
+            switch_next->status = FIBER_RUNNING;
+            
+            switch_prev->status = FIBER_WAITING;
+    
+            hlist_del(&(switch_next->next));
+            hlist_del(&(switch_prev->next));
 
-                switch_next->activations += 1;
-                switch_next->status = FIBER_RUNNING;
-                switch_next->thread_on = pid;
-                switch_prev->status = FIBER_WAITING;
+            hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
+            hlist_add_head(&(switch_next->next), &(process->running_fibers));
 
-                hlist_del(&(switch_next->next));
-                hlist_del(&(switch_prev->next));
+            preempt_enable();
 
-                hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
-                hlist_add_head(&(switch_next->next), &(process->running_fibers));
+            printk_msg("[%d, %d] SwitchToFiber() EXIT SUCCESS", tgid, pid);
+            return 0;
 
-                preempt_enable();
-
-                printk_msg("[%d, %d] SwitchToFiber() EXIT SUCCESS", tgid, pid);
-                return 0;
-
-            }
-        }
+        }   
     }
 
+    printk_msg("[%d, %d] SwitchToFiber() No FIbers, EXIT", tgid, pid);
     return -ENOTTY;
 }  
 
