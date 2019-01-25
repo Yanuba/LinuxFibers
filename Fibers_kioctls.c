@@ -148,7 +148,7 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     struct process_active   *process;
     struct fiber_struct     *fiber;
 
-    struct fiber_args       *usr_buf;   //buffer to communicate with userspace
+    struct fiber_args       usr_buf;   //buffer to communicate with userspace
 
     pid_t tgid; 
     pid_t pid;
@@ -167,32 +167,28 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     }
 
     printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, pid);
-    usr_buf = (struct fiber_args *) kmalloc(sizeof(struct fiber_args), GFP_KERNEL);
         
-    if (copy_from_user((void *) usr_buf, (void *) args, sizeof(struct fiber_args)))
+    if (copy_from_user((void *) &usr_buf, (void *) args, sizeof(struct fiber_args)))
     {
         printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, pid);
-        kfree(usr_buf);
         return -EFAULT;
     }
         
-    fiber = allocate_fiber(process->next_fid++, current, usr_buf->routine, usr_buf->routine_args, usr_buf->stack_address);
+    fiber = allocate_fiber(process->next_fid++, current, usr_buf.routine, usr_buf.routine_args, usr_buf.stack_address);
     hlist_add_head(&fiber->next, &process->waiting_fibers);
 
-    usr_buf->ret = fiber->fiber_id;
+    usr_buf.ret = fiber->fiber_id;
 
     printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Returning to user fiber_if %d\n", KBUILD_MODNAME, pid, fiber->fiber_id);
 
-    if (copy_to_user((void *) args, (void *) usr_buf, sizeof(struct fiber_args))) 
+    if (copy_to_user((void *) args, (void *) &usr_buf, sizeof(struct fiber_args))) 
     {
         printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot Return To User\n", KBUILD_MODNAME, pid);
         hlist_del(&fiber->next);
         kfree(fiber);
-        kfree(usr_buf);
         return -EFAULT;
     }
 
-    kfree(usr_buf);
     printk_msg("[%d, %d] CreateFiber() EXIT SUCCESS", tgid, pid);
     return 0;
     
@@ -209,7 +205,6 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     struct fiber_struct     *switch_next;
     struct fiber_struct     *cursor;
     struct process_active   *process;
-
 
     fiber_t                 id_next;
 
@@ -409,7 +404,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     struct process_active   *process;
     struct fls_struct       *storage;
     
-    struct fls_args           *ret;
+    struct fls_args           ret;
 
     unsigned long flags;
 
@@ -429,56 +424,48 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
         return -ENOTTY;
     }
 
-    ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
-    if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
+    if (copy_from_user((void *) &ret, (void *) args, sizeof(struct fls_args)))
     {   
         printk_msg("[%d, %d] FLSGet() Cannot Access input data EXIT", tgid, pid);
-        kfree(ret);
         return -EFAULT;
     }
 
-    if ((ret->index) > MAX_FLS_INDEX)
+    if ((ret.index) > MAX_FLS_INDEX)
     {   
         printk_msg("[%d, %d] FLSGet() Index Out of Bound, EXIT", tgid, pid);
-        kfree(ret);
         return -ENOTTY;
     }
 
     storage = &(process->fls);
     spin_lock_irqsave(&storage->fls_lock, flags);
     
-    if (test_bit(ret->index, storage->used_index))
+    if (test_bit(ret.index, storage->used_index))
     {
-        ret->value = storage->fls[ret->index];
-        printk_msg("[%d, %d] FLSGet(), used index %ld", tgid, pid, ret->index);
-        if (copy_to_user((void *) args, (void *) ret, sizeof(struct fls_args)))
+        ret.value = storage->fls[ret.index];
+        printk_msg("[%d, %d] FLSGet(), used index %ld", tgid, pid, ret.index);
+        if (copy_to_user((void *) args, (void *) &ret, sizeof(struct fls_args)))
         {   
             spin_unlock_irqrestore(&storage->fls_lock, flags);
-            kfree(ret);
             printk_msg("[%d, %d] FLSGet() Cannot Return, EXIT", tgid, pid);
             return -EFAULT;
         }
         spin_unlock_irqrestore(&storage->fls_lock, flags);
-        kfree(ret);
         printk_msg("[%d, %d] FLSGet() EXIT SUCCESS", tgid, pid);
         return 0;
     }
     else
     {   
         spin_unlock_irqrestore(&storage->fls_lock, flags);
-        kfree(ret);
         printk_msg("[%d, %d] FLSGet() Index Not in Use, EXIT", tgid, pid);
         return -ENOTTY;
     }
-
 }
 
 long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args) 
 {
     struct process_active   *process;
     struct fls_struct       *storage;
-    
-    struct fls_args           *ret;
+    struct fls_args         ret;
 
     unsigned long flags;
 
@@ -498,18 +485,15 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
         return -ENOTTY;
     }
 
-    ret = kmalloc(sizeof(struct fls_args), GFP_KERNEL);
-    if (copy_from_user((void *) ret, (void *) args, sizeof(struct fls_args)))
+    if (copy_from_user((void *) &ret, (void *) args, sizeof(struct fls_args)))
     {   
         printk_msg("[%d, %d] FLSSet() Cannot read Input EXIT", tgid, pid);
-        kfree(ret);
         return -EFAULT;
     }
 
-    if ((ret->index) > MAX_FLS_INDEX)
+    if ((ret.index) > MAX_FLS_INDEX)
     {   
         printk_msg("[%d, %d] FLSSet() Index Out of Bound EXIT", tgid, pid);
-        kfree(ret);
         return -ENOTTY;
     }
 
@@ -517,19 +501,17 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
 
     spin_lock_irqsave(&storage->fls_lock, flags);
 
-    if (test_bit(ret->index, storage->used_index))
+    if (test_bit(ret.index, storage->used_index))
     {   
-        printk_msg("[%d, %d] FLSGet(), used index %ld", tgid, pid, ret->index);
-        storage->fls[ret->index] = ret->value;
+        printk_msg("[%d, %d] FLSGet(), used index %ld", tgid, pid, ret.index);
+        storage->fls[ret.index] = ret.value;
         spin_unlock_irqrestore(&storage->fls_lock, flags);
-        kfree(ret);
         printk_msg("[%d, %d] FLSSet() EXIT SUCCESS", tgid, pid);
         return 0;
     }
     else
     {   
         spin_unlock_irqrestore(&storage->fls_lock, flags);
-        kfree(ret);
         printk_msg("[%d, %d] FLSSet() Index Not in Use EXIT", tgid, pid);
         return -ENOTTY;
     }
