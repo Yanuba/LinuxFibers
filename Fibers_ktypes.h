@@ -48,7 +48,7 @@ struct process_active
     struct hlist_head running_fibers;   //running fibers of the process
     struct hlist_head waiting_fibers;   //waiting fibers of the process
     struct hlist_node next;             //other process in the bucket
-    struct fls_struct *fls;             //Fiber local storage
+    struct fls_struct fls;              //Fiber local storage
 };
 
 struct fiber_struct 

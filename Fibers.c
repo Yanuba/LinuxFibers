@@ -143,7 +143,7 @@ long long FlsGetValue(long index){
     ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_GET, &args);
     if (ret) 
         return -1;
-    
+
     return args.value;
 }
 
