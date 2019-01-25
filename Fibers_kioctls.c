@@ -81,7 +81,6 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
 {    
     struct process_active   *process;
     struct fiber_struct     *fiber;
-    struct hlist_node       *cursor;
     pid_t tgid; 
     pid_t pid;
     
@@ -95,15 +94,15 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     if (process) 
     {   
         printk_msg("[%d, %d] ConvertThreadToFiber() Process Active", tgid, pid);
-        hlist_for_each(cursor, &process->running_fibers) 
+        hlist_for_each_entry(fiber, &process->running_fibers, next)
         {
-            fiber = hlist_entry(cursor, struct fiber_struct, next);
             if (fiber->parent_thread == pid) 
             {   
                 printk_msg("[%d, %d] ConvertThreadToFiber() Thread already fiber, EXIT", tgid, pid);
                 return -ENOTTY;
             }
         }
+        
         goto ALLOCATE_FIBER;
     }
 
@@ -209,9 +208,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
     struct fiber_struct     *switch_prev;
     struct fiber_struct     *switch_next;
     struct fiber_struct     *cursor;
-
     struct process_active   *process;
-    struct hlist_node       *list_cursor;
+
 
     fiber_t                 id_next;
 
@@ -239,20 +237,17 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
         return -ENOTTY;
     }
 
-    hlist_for_each(list_cursor, &process->waiting_fibers) 
+    hlist_for_each_entry(cursor, &process->waiting_fibers, next)
     {
-        cursor = hlist_entry(list_cursor, struct fiber_struct, next);        
-
         if (cursor->fiber_id == id_next) 
         {
             switch_next = cursor;
+            break;
         }
     }
-        
-    hlist_for_each(list_cursor, &process->running_fibers) 
-    {
-        cursor = hlist_entry(list_cursor, struct fiber_struct, next);
 
+    hlist_for_each_entry(cursor, &process->running_fibers, next) 
+    {
         if (cursor->fiber_id == id_next) 
         {   
             printk_msg("[%d, %d] SwitchToFiber() Trying to Switch to an active fiber", tgid, pid);
