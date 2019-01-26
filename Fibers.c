@@ -21,7 +21,6 @@ bool _DESCRIPTOR_GUARD = false;
  * */
 void *ConvertThreadToFiber() 
 {    
-    int     ret;
     fiber_t *id;
     
     id = (fiber_t *) malloc(sizeof(fiber_t)); 
@@ -37,8 +36,7 @@ void *ConvertThreadToFiber()
         else _DESCRIPTOR_GUARD = true;
     }
     
-    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_CONVERT, id);
-    if (ret) 
+    if (ioctl(_FIBER_DESCRIPTOR, IOCTL_CONVERT, id)) 
     {
         *id = -1;
     }
@@ -53,18 +51,18 @@ void *ConvertThreadToFiber()
  * */
 void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args) 
 {
-    int                 ret;
+    struct fiber_args   arguments;
     fiber_t             *id;
-    struct fiber_args   *arguments;
-    
-    id = (fiber_t *) malloc(sizeof(fiber_t)); 
-
-    arguments = (struct fiber_args*) malloc(sizeof(struct fiber_args));
-    arguments->routine = routine;
-    arguments->routine_args = args;
     
     void *stack;
 	size_t reminder;
+
+    id = (fiber_t *) malloc(sizeof(fiber_t)); 
+
+    arguments.routine = routine;
+    arguments.routine_args = args;
+    
+    
 	if (stack_size <= 0) 
 		stack_size = 8192;
 
@@ -73,18 +71,21 @@ void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args)
 	if (reminder != 0) 
 		stack_size += getpagesize() - reminder;
 
-	posix_memalign(&stack, 16, stack_size);
+	if (posix_memalign(&stack, 16, stack_size))
+    {
+        //cannot allocate stack
+        *id = -1;
+        return id;
+    }
 	bzero(stack, stack_size);
 
-    arguments->stack_address = stack+stack_size-8; //-8 since stack expect a return address
+    arguments.stack_address = stack+stack_size-8; //-8 since stack expect a return address
 
-    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_CREATE, arguments);
-    if (ret) 
+    if (ioctl(_FIBER_DESCRIPTOR, IOCTL_CREATE, &arguments)) 
         *id = -1;    
     else 
-        *id = arguments->ret;
+        *id = arguments.ret;
 
-    free(arguments);
     return id;
 }
 
@@ -92,13 +93,11 @@ void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args)
  * Switches the execution context to a different Fiber.
  * It can fail if switching to a Fiber which is already active
  * */
-void SwitchToFiber(void* fiber) 
+bool SwitchToFiber(void* fiber) 
 {
-    int ret;
-
-    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_SWITCH, fiber);
-    
-    return;
+    if(ioctl(_FIBER_DESCRIPTOR, IOCTL_SWITCH, fiber))
+        return false;
+    return true;
 }
 
 /*
@@ -107,13 +106,10 @@ void SwitchToFiber(void* fiber)
  * */
 long FlsAlloc(void) 
 {
-    int ret;
     long index;
     
-    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_ALLOC, &index);
-    if (ret)
+    if (ioctl(_FIBER_DESCRIPTOR, IOCTL_ALLOC, &index))
         index = -1;
-
     return index;
 }
 
@@ -125,23 +121,19 @@ bool FlsFree(long index) {
 
     if (ioctl(_FIBER_DESCRIPTOR, IOCTL_FREE, &index))
         return false;
-
     return true;
 }
-
 
 /*
  *  GetValue associated to FLS Index
  *  returns -1 in case of error
  * */
 long long FlsGetValue(long index){
-    int ret;
 
     struct fls_args args;
     args.index = index;
 
-    ret = ioctl(_FIBER_DESCRIPTOR, IOCTL_GET, &args);
-    if (ret) 
+    if (ioctl(_FIBER_DESCRIPTOR, IOCTL_GET, &args)) 
         return -1;
 
     return args.value;
@@ -150,12 +142,13 @@ long long FlsGetValue(long index){
 /*
  *@TO_DO
  * */
-void FlsSetValue(long index, long long value){
+bool FlsSetValue(long index, long long value){
     struct fls_args args;
     args.index = index;
     args.value = value;
 
-    ioctl(_FIBER_DESCRIPTOR, IOCTL_SET, &args);
-    return;
+    if (ioctl(_FIBER_DESCRIPTOR, IOCTL_SET, &args))
+        return false;
+    return true;
 }
 

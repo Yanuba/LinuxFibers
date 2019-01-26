@@ -5,9 +5,9 @@
 
 void *ConvertThreadToFiber(void);
 void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args);
-void SwitchToFiber(void* fiber);
+bool SwitchToFiber(void* fiber);
 
 long FlsAlloc(void);
 bool FlsFree(long index);
 long long FlsGetValue(long index);
-void FlsSetValue(long index, long long value);
+bool FlsSetValue(long index, long long value);
