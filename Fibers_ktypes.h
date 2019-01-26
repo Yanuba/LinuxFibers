@@ -8,6 +8,10 @@
 
 #include "Fibers_utypes.h"
 
+#define printk_msg(str, ...) do { \
+    printk(KERN_NOTICE KBUILD_MODNAME ": " str,##__VA_ARGS__); \
+                            } while(0);
+
 #define FIBER_RUNNING 1
 #define FIBER_WAITING 0
 

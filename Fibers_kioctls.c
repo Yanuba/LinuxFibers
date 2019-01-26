@@ -9,9 +9,6 @@
 
 // somewhere we are passing an invalid address that is used userspace
 
-#define printk_msg(str, ...) do { \
-    printk(KERN_NOTICE KBUILD_MODNAME ": " str,##__VA_ARGS__); \
-                            } while(0);
 /*
  * Function to find process in hashtable -> convert it into a macro
  * */

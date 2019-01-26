@@ -22,90 +22,52 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
-//use macros to extract arg sizes in IOCTL function (They exists for some reason)
-
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
     struct task_struct *caller;
     caller = current;
 
+    if (_IOC_DIR(cmd) & _IOC_READ) {
+        if (!access_ok(VERIFY_WRITE, arg, _IOC_SIZE(cmd)))
+        {
+            printk_msg("Cannot return data to userspace");
+            return -EFAULT;        
+        }
+    }
+    else {
+        if (!access_ok(VERIFY_READ, arg, _IOC_SIZE(cmd)))
+        {
+            printk_msg("Cannot read data from userspace");
+            return -EFAULT;    
+        }
+    }
+
     switch(cmd) 
     {        
         case IOCTL_CONVERT:
-            printk(KERN_NOTICE "%s: ConvertThreadToFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
-            
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(fiber_t)))
-            {
-                printk(KERN_NOTICE "%s:  ConvertThreadToFiber() cannot return data to userspace\n", KBUILD_MODNAME);
-                return -EFAULT; //Is this correct?
-            }
-
             return _ioctl_convert(&process_table, (fiber_t *) arg);
 
         case IOCTL_CREATE:
-            printk(KERN_NOTICE "%s: CreateFiber() called by thread %d of process %d\n", KBUILD_MODNAME, task_pid_nr(caller), task_tgid_nr(caller));
-
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct fiber_args)))
-            {
-                printk(KERN_NOTICE "%s:  CreateFiber() cannot return data to userspace\n", KBUILD_MODNAME);
-                return -EFAULT; //Is this correct?
-            }
-
             return _ioctl_create(&process_table, (struct fiber_args*) arg);
 
         case IOCTL_SWITCH:
-            if (!access_ok(VERIFY_READ, arg, sizeof(fiber_t))) 
-            {
-                printk(KERN_NOTICE "%s:  SwitchToFiber() cannot read data from userspace\n", KBUILD_MODNAME);
-                return -EFAULT; //Is this correct?
-            }
-
             return _ioctl_switch(&process_table, (fiber_t *) arg);
 
         case IOCTL_ALLOC:
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(long)))
-            {
-                printk(KERN_NOTICE "%s: FlsAlloc() cannot return data to userspace\n", KBUILD_MODNAME);
-                return -EFAULT;
-            }
-
             return _ioctl_alloc(&process_table, (long *) arg);
 
-        case IOCTL_FREE: 
-            if (!access_ok(VERIFY_READ, arg, sizeof(long)))
-            {
-                printk(KERN_NOTICE "%s: FlsFree() cannot read data from userspace\n", KBUILD_MODNAME);
-                return -EFAULT;
-            }
-            
+        case IOCTL_FREE:
             return _ioctl_free(&process_table, (long *) arg);
             
         case IOCTL_GET: 
-            
-            if (!access_ok(VERIFY_WRITE, arg, sizeof(struct fls_args)))
-            {
-                printk(KERN_NOTICE "%s: FlsFree() cannot read data from userspace\n", KBUILD_MODNAME);
-                return -EFAULT;
-            }
-            
             return _ioctl_get(&process_table, (struct fls_args *) arg);
 
         case IOCTL_SET:
-            
-            if (!access_ok(VERIFY_READ, arg, sizeof(struct fls_args)))
-            {
-                printk(KERN_NOTICE "%s: FlsFree() cannot read data from userspace\n", KBUILD_MODNAME);
-                return -EFAULT;
-            }
-            
             return _ioctl_set(&process_table, (struct fls_args *) arg);
 
         default:
-            printk(KERN_NOTICE "%s: Default ioctl called\n", KBUILD_MODNAME);
             return -ENOTTY; //return value is caught and errno set accordingly
-            break;
     }
-    return 0;
 }
 
 //Copyed from tty driver
