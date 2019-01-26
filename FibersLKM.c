@@ -128,6 +128,7 @@ static int __init fibers_init(void)
         return ret;
 }
 
+/* Missing clean_up of data structures */
 static void __exit fibers_exit(void)
 {   
     device_destroy(device_class, MKDEV(dev_major,0));

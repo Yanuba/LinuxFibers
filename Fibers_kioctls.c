@@ -7,8 +7,6 @@
 
 #include "Fibers_kioctls.h"
 
-// somewhere we are passing an invalid address that is used userspace
-
 /*
  * Function to find process in hashtable -> convert it into a macro
  * */
