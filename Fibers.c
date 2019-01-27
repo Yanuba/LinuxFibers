@@ -80,6 +80,7 @@ void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args)
 	bzero(stack, stack_size);
 
     arguments.stack_address = stack+stack_size-8; //-8 since stack expect a return address
+    //((unsigned long *) arguments.stack_address)[-1] = (unsigned long) &foo; 
 
     if (ioctl(_FIBER_DESCRIPTOR, IOCTL_CREATE, &arguments)) 
         *id = -1;    
