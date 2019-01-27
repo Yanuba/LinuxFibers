@@ -235,6 +235,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
             break;
         }
     }
+    if (cursor->fiber_id != id_next) 
+        switch_next = NULL;
 
     hlist_for_each_entry(cursor, &process->running_fibers, next) 
     {
@@ -245,7 +247,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
             return -ENOTTY;
         }
       
-        else if (cursor->thread_on == pid) 
+        else if (switch_next && cursor->thread_on == pid) 
         {
             switch_prev = cursor;
             
