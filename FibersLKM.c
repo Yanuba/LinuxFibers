@@ -30,14 +30,12 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     if (_IOC_DIR(cmd) & _IOC_READ) {
         if (!access_ok(VERIFY_WRITE, arg, _IOC_SIZE(cmd)))
         {
-            printk_msg("Cannot return data to userspace");
             return -EFAULT;        
         }
     }
     else {
         if (!access_ok(VERIFY_READ, arg, _IOC_SIZE(cmd)))
         {
-            printk_msg("Cannot read data from userspace");
             return -EFAULT;    
         }
     }
@@ -90,7 +88,6 @@ static int __init fibers_init(void)
     //Allocate a major number
     dev_major = register_chrdev(0, KBUILD_MODNAME, &fops);
     if (dev_major < 0) {
-        printk(KERN_ERR "%s: Failed registering char device\n", KBUILD_MODNAME);
         ret = dev_major;
         goto fail_regchrdev;
     }
@@ -98,7 +95,6 @@ static int __init fibers_init(void)
     //create class for the device
     device_class = class_create(THIS_MODULE, "Fibers");
     if (IS_ERR(device_class)) {
-        printk(KERN_ERR "%s: Failed to create device class\n", KBUILD_MODNAME);
         ret = PTR_ERR(device_class);
         goto fail_classcreate;
     }
@@ -108,7 +104,6 @@ static int __init fibers_init(void)
     //create device
     device = device_create(device_class, NULL, MKDEV(dev_major,0), NULL, KBUILD_MODNAME);
     if (IS_ERR(device)) {
-        printk(KERN_ERR "%s: Failed to create device class\n", KBUILD_MODNAME);
         ret = PTR_ERR(device);
         goto fail_devcreate;
     }

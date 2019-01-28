@@ -8,10 +8,6 @@
 
 #include "Fibers_utypes.h"
 
-#define printk_msg(str, ...) do { \
-    printk(KERN_NOTICE KBUILD_MODNAME ": " str,##__VA_ARGS__); \
-                            } while(0);
-
 #define FIBER_RUNNING 1
 #define FIBER_WAITING 0
 
@@ -48,6 +44,7 @@ struct fls_struct
  * */
 struct process_active 
 {
+    spinlock_t lock;                    //lock for fiber_id
     pid_t tgid;                         //process id
     pid_t next_fid;                     //will be next fiber id - this is a weakpoint (make it atomic?)                   
     struct hlist_head running_fibers;   //running fibers of the process
