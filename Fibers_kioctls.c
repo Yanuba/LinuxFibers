@@ -163,6 +163,8 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
 
     printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, process found\n", KBUILD_MODNAME, pid);
         
+    // check if we are fiber
+
     if (copy_from_user((void *) &usr_buf, (void *) args, sizeof(struct fiber_args)))
     {
         printk(KERN_NOTICE "%s: CreateFiber() called by thread %d, Cannot copy args\n", KBUILD_MODNAME, pid);
@@ -252,9 +254,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
             switch_prev = cursor;
             
             //do context switch
-                
+            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                                 
             preempt_disable();
-            printk(KERN_NOTICE "%s: SwitchToFiber() called by thread %d, Switching from %d to %d\n", KBUILD_MODNAME, pid, switch_prev->fiber_id, switch_next->fiber_id);                               
             copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
             (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
             (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
