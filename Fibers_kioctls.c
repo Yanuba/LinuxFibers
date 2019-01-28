@@ -76,6 +76,9 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
 {    
     struct process_active   *process;
     struct fiber_struct     *fiber;
+
+    unsigned long           flags;
+
     pid_t tgid; 
     pid_t pid;
     
@@ -115,7 +118,16 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     process->fls.fls = NULL;
     process->fls.used_index = NULL;
     
-    hash_add(hashtable->htable, &process->next, tgid);
+    if (spin_trylock_irqsave(&hashtable->lock, flags))
+        hash_add_rcu(hashtable->htable, &process->next, tgid);
+    else
+    {   
+        spin_unlock_irqrestore(&hashtable->lock, flags);
+        printk_msg("[%d, %d] ConvertThreadToFiber() Someone else Is modifying the hashtable, EXIT", tgid, pid);
+        kfree(process);
+        return -EFAULT;
+    }
+    spin_unlock_irqrestore(&hashtable->lock, flags);
 
 ALLOCATE_FIBER:
     fiber = allocate_fiber(process->next_fid++, current, NULL, NULL, NULL);

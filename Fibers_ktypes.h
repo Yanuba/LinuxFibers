@@ -27,6 +27,7 @@
 struct module_hashtable
 {
     DECLARE_HASHTABLE(htable, 15); //array of hlist_head
+    spinlock_t lock;
 };
 
 /*
