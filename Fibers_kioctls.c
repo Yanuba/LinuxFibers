@@ -50,6 +50,12 @@ struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void 
 
         fiber->entry_point = (void *) fiber->regs.ip;
 
+        //FLS
+        //spin_lock_init(&(fiber->fls.fls_lock));
+        fiber->fls.size = -1;
+        fiber->fls.fls = NULL;
+        fiber->fls.used_index = NULL;
+
         return fiber;
 }
 
@@ -107,12 +113,6 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     INIT_HLIST_HEAD(&process->waiting_fibers);
     INIT_HLIST_NODE(&process->next);
     spin_lock_init(&(process->lock));
-
-    //FLS
-    spin_lock_init(&(process->fls.fls_lock));
-    process->fls.size = -1;
-    process->fls.fls = NULL;
-    process->fls.used_index = NULL;
     
     if (spin_trylock_irqsave(&hashtable->lock, flags))
         hash_add(hashtable->htable, &process->next, tgid);
@@ -174,6 +174,19 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     if (!process)
         return -ENOTTY;
     
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry(fiber, &process->running_fibers, next)
+    {
+        if (fiber->thread_on == pid)
+            break;
+    }
+    if (!fiber || fiber->thread_on != pid)
+    {
+        spin_unlock_irqrestore(&process->lock, flags);
+        return -ENOTTY;
+    }
+    spin_unlock_irqrestore(&process->lock, flags);
+
     if (copy_from_user((void *) &usr_buf, (void *) args, sizeof(struct fiber_args)))
         return -EFAULT;
     
@@ -292,6 +305,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 {   
     struct process_active   *process;
+    struct fiber_struct     *fiber;
     struct fls_struct       *storage;
 
     unsigned long index;
@@ -307,9 +321,23 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     if (!process)
         return -ENOTTY;
 
-    storage = &(process->fls);
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry(fiber, &process->running_fibers, next)
+    {
+        if (fiber->thread_on == pid)
+        {
+            storage = &(fiber->fls);
+            break;
+        }
+    }
+    if (!fiber || fiber->thread_on != pid)
+    {
+        spin_unlock_irqrestore(&process->lock, flags);
+        return -ENOTTY;
+    }
+    spin_unlock_irqrestore(&process->lock, flags);
 
-    spin_lock_irqsave(&storage->fls_lock, flags);
+    //spin_lock_irqsave(&storage->fls_lock, flags);
 
     if (storage->fls == NULL) 
     {
@@ -329,16 +357,16 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
         {
             storage->size -= 1;
             clear_bit(index, storage->used_index);
-            spin_unlock_irqrestore(&storage->fls_lock, flags);
+            //spin_unlock_irqrestore(&storage->fls_lock, flags);
             return -EFAULT;
         } 
-        spin_unlock_irqrestore(&storage->fls_lock, flags);
+        //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return 0;
         
     }    
     else
     {
-        spin_unlock_irqrestore(&storage->fls_lock, flags);
+        //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return -ENOTTY;
     }
 }
@@ -347,6 +375,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
 {
     struct process_active   *process;
     struct fls_struct       *storage;
+    struct fiber_struct     *fiber;
 
     unsigned long           index;
     unsigned long           flags;
@@ -362,26 +391,40 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     if (!process)
         return -ENOTTY;
 
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry(fiber, &process->running_fibers, next)
+    {
+        if (fiber->thread_on == pid)
+        {
+            storage = &(fiber->fls);
+            break;
+        }
+    }
+    if (!fiber || fiber->thread_on != pid)
+    {
+        spin_unlock_irqrestore(&process->lock, flags);
+        return -ENOTTY;
+    }
+    spin_unlock_irqrestore(&process->lock, flags);
+
     if (copy_from_user((void *) &index, (void *) arg, sizeof(long)))
         return -EFAULT;
 
     if (index > MAX_FLS_INDEX)
         return -ENOTTY;
-    
 
-    storage = &(process->fls);
-
-    spin_lock_irqsave(&storage->fls_lock, flags);
+    //storage = &(process->fls);
+    //spin_lock_irqsave(&storage->fls_lock, flags);
     
     if (storage->fls == NULL || storage->used_index == NULL)
     {
-        spin_unlock_irqrestore(&storage->fls_lock, flags);
+        //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return -ENOTTY;
     }
     storage->size -= 1;
     clear_bit(index, storage->used_index);
     
-    spin_unlock_irqrestore(&storage->fls_lock, flags);
+    //spin_unlock_irqrestore(&storage->fls_lock, flags);
     
     return 0; 
        
@@ -391,6 +434,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
 {
     struct process_active   *process;
     struct fls_struct       *storage;
+    struct fiber_struct     *fiber;
     
     struct fls_args           ret;
 
@@ -407,29 +451,45 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     if (!process)
         return -ENOTTY;
 
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry(fiber, &process->running_fibers, next)
+    {
+        if (fiber->thread_on == pid)
+        {
+            storage = &(fiber->fls);
+            break;
+        }
+    }
+    if (!fiber || fiber->thread_on != pid)
+    {
+        spin_unlock_irqrestore(&process->lock, flags);
+        return -ENOTTY;
+    }
+    spin_unlock_irqrestore(&process->lock, flags);
+
     if (copy_from_user((void *) &ret, (void *) args, sizeof(struct fls_args)))
         return -EFAULT;
 
     if ((ret.index) > MAX_FLS_INDEX)
         return -ENOTTY;
 
-    storage = &(process->fls);
-    spin_lock_irqsave(&storage->fls_lock, flags);
+    //storage = &(process->fls);
+    //spin_lock_irqsave(&storage->fls_lock, flags);
     
     if (test_bit(ret.index, storage->used_index))
     {
         ret.value = storage->fls[ret.index];
         if (copy_to_user((void *) args, (void *) &ret, sizeof(struct fls_args)))
         {   
-            spin_unlock_irqrestore(&storage->fls_lock, flags);
+            //spin_unlock_irqrestore(&storage->fls_lock, flags);
             return -EFAULT;
         }
-        spin_unlock_irqrestore(&storage->fls_lock, flags);
+        //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return 0;
     }
     else
     {   
-        spin_unlock_irqrestore(&storage->fls_lock, flags);
+        //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return -ENOTTY;
     }
 }
@@ -437,6 +497,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
 long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args) 
 {
     struct process_active   *process;
+    struct fiber_struct     *fiber;
     struct fls_struct       *storage;
     struct fls_args         ret;
 
@@ -453,25 +514,40 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     if (!process) 
         return -ENOTTY;
 
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry(fiber, &process->running_fibers, next)
+    {
+        if (fiber->thread_on == pid)
+        {
+            storage = &(fiber->fls);
+            break;
+        }
+    }
+    if (!fiber || fiber->thread_on != pid)
+    {
+        spin_unlock_irqrestore(&process->lock, flags);
+        return -ENOTTY;
+    }
+    spin_unlock_irqrestore(&process->lock, flags);
+
     if (copy_from_user((void *) &ret, (void *) args, sizeof(struct fls_args)))
         return -EFAULT;
 
     if ((ret.index) > MAX_FLS_INDEX)
         return -ENOTTY;
 
-    storage = &(process->fls);
-
-    spin_lock_irqsave(&storage->fls_lock, flags);
+    //storage = &(process->fls);
+    //spin_lock_irqsave(&storage->fls_lock, flags);
 
     if (test_bit(ret.index, storage->used_index))
     {   
         storage->fls[ret.index] = ret.value;
-        spin_unlock_irqrestore(&storage->fls_lock, flags);
+        //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return 0;
     }
     else
     {   
-        spin_unlock_irqrestore(&storage->fls_lock, flags);
+        //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return -ENOTTY;
     }
 }

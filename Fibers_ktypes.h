@@ -11,7 +11,7 @@
 #define FIBER_RUNNING 1
 #define FIBER_WAITING 0
 
-#define MAX_FLS_INDEX 4096 //Up to 32Kb for process
+#define MAX_FLS_INDEX 1024 //Up to 8Kb for fiber
 
 /* 
  * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
@@ -33,7 +33,7 @@ struct module_hashtable
  * */
 struct fls_struct 
 {
-    spinlock_t fls_lock;            // spinlock to fls (spin_lock(&lock), spin_unlock(&lock))
+    //spinlock_t fls_lock;            // spinlock to fls (spin_lock(&lock), spin_unlock(&lock))
     unsigned long   size;           // number of index used
     long long       *fls;           // fls array
     unsigned long   *used_index;    // bitmap for marking fls index allocated
@@ -50,7 +50,6 @@ struct process_active
     struct hlist_head running_fibers;   //running fibers of the process
     struct hlist_head waiting_fibers;   //waiting fibers of the process
     struct hlist_node next;             //other process in the bucket
-    struct fls_struct fls;              //Fiber local storage
 };
 
 struct fiber_struct 
@@ -58,7 +57,8 @@ struct fiber_struct
     pid_t fiber_id;
     pid_t thread_on;        //last thread the fiber runs on
     struct hlist_node next; //must queue fibers
-    
+    struct fls_struct fls;              //Fiber local storage
+
     struct pt_regs regs;    //CPU state
     struct fpu fpu_regs;    //FPU state
 
