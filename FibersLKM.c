@@ -4,6 +4,8 @@
 
 #include <linux/hashtable.h>
 
+#include <linux/kprobes.h>
+
 #include "Fibers_ktypes.h"
 #include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
@@ -11,6 +13,7 @@
 struct module_hashtable process_table;
 
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
+int kprobe_entry_handler(struct kprobe *, struct pt_regs *);
 
 static int dev_major;
 static struct class *device_class = NULL;
@@ -20,6 +23,11 @@ static struct file_operations fops = {
     .owner = THIS_MODULE,
     .unlocked_ioctl = fibers_ioctl,
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
+};
+
+static struct kprobe probe = {
+    .pre_handler = kprobe_entry_handler,
+    .symbol_name = "do_exit"
 };
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
@@ -68,6 +76,10 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     }
 }
 
+int kprobe_entry_handler(struct kprobe *p, struct pt_regs *regs) {
+    return _cleanup(&process_table);
+}
+
 //Copyed from tty driver
 static char *fiber_devnode(struct device *dev, umode_t *mode)
 {
@@ -113,6 +125,10 @@ static int __init fibers_init(void)
     hash_init(process_table.htable); //should be destroyed?
     spin_lock_init(&process_table.lock);
 
+    ret = register_kprobe(&probe);
+    if (ret)
+        goto fail_devcreate; //fail chain
+
     return 0;
 
     fail_devcreate:
@@ -127,6 +143,7 @@ static int __init fibers_init(void)
 /* Missing clean_up of data structures */
 static void __exit fibers_exit(void)
 {   
+    unregister_kprobe(&probe);
     device_destroy(device_class, MKDEV(dev_major,0));
     class_unregister(device_class);
     class_destroy(device_class);

@@ -552,6 +552,59 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     }
 }
 
-/*
- * Missing Cleanup of the data structures when a fiber exits or when the module is unmounted
- */
+int _cleanup(struct module_hashtable *hashtable) {
+    struct process_active   *process;
+    struct fiber_struct     *fiber;
+    struct hlist_node       *n;
+
+    pid_t tgid; 
+    pid_t pid;
+
+    unsigned long flags;
+
+    tgid = task_tgid_nr(current);
+    pid = task_pid_nr(current);
+
+    process = find_process(hashtable, tgid);
+    if (!process)
+        goto exit_cleanup;
+
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next) {
+        if (fiber->thread_on == pid) {
+            hlist_del(&fiber->next);
+            break;
+        }
+    }
+    if (fiber->thread_on != pid)
+        fiber = NULL;
+    spin_unlock_irqrestore(&process->lock, flags);
+    if (fiber) {
+        kfree(fiber->fls.used_index);
+        kfree(fiber->fls.fls);
+        kfree(fiber);
+    }
+
+    //check if it was the last one;
+    hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next)
+        break;
+    if (fiber) {
+        goto exit_cleanup;
+    }
+    
+    //fiber is null, free everything
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry_safe(fiber, n, &process->waiting_fibers, next) {
+        hlist_del(&fiber->next);
+        kfree(fiber->fls.used_index);
+        kfree(fiber->fls.fls);
+        kfree(fiber);
+    }
+    spin_unlock_irqrestore(&process->lock, flags);
+    spin_lock_irqsave(&hashtable->lock, flags);
+    hlist_del(&process->next);
+    spin_unlock_irqrestore(&hashtable->lock, flags);
+    kfree(process);
+exit_cleanup:
+    return 0;
+}
