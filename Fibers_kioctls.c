@@ -580,10 +580,10 @@ int _cleanup(struct module_hashtable *hashtable) {
         fiber = NULL;
     spin_unlock_irqrestore(&process->lock, flags);
     if (fiber) {
-        //kfree(fiber->fls.used_index);
-        //kfree(fiber->fls.fls);
+        kfree(fiber->fls.used_index);
+        vfree(fiber->fls.fls);
         //kfree(fiber);
-        //fiber = NULL;
+        fiber = NULL;
     }
 
     //check if it was the last one;
@@ -601,9 +601,9 @@ int _cleanup(struct module_hashtable *hashtable) {
     //fiber is null, free everything
     spin_lock_irqsave(&process->lock, flags);
     hlist_for_each_entry_safe(fiber, n, &process->waiting_fibers, next) {
-        hlist_del(&fiber->next);
+        //hlist_del(&fiber->next);
         //kfree(fiber->fls.used_index);
-        //kfree(fiber->fls.fls);
+        //vfree(fiber->fls.fls);
         //kfree(fiber);
     }
     spin_unlock_irqrestore(&process->lock, flags);
