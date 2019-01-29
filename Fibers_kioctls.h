@@ -12,4 +12,6 @@ long _ioctl_free(struct module_hashtable *hashtable, long* index);
 long _ioctl_get(struct module_hashtable *hashtable, struct fls_args *);
 long _ioctl_set(struct module_hashtable *hashtable, struct fls_args *);
 
+int _cleanup(struct module_hashtable *hashtable);
+
 #endif /* !FKIOCTLS_H */

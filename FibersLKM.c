@@ -4,6 +4,8 @@
 
 #include <linux/hashtable.h>
 
+#include <linux/kprobes.h>
+
 #include "Fibers_ktypes.h"
 #include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
@@ -11,6 +13,7 @@
 struct module_hashtable process_table;
 
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
+int kprobe_entry_handler(struct kprobe *, struct pt_regs *);
 
 static int dev_major;
 static struct class *device_class = NULL;
@@ -22,6 +25,11 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
 
+static struct kprobe probe = {
+    .pre_handler = kprobe_entry_handler,
+    .symbol_name = "do_exit"
+};
+
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
     struct task_struct *caller;
@@ -30,14 +38,12 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     if (_IOC_DIR(cmd) & _IOC_READ) {
         if (!access_ok(VERIFY_WRITE, arg, _IOC_SIZE(cmd)))
         {
-            printk_msg("Cannot return data to userspace");
             return -EFAULT;        
         }
     }
     else {
         if (!access_ok(VERIFY_READ, arg, _IOC_SIZE(cmd)))
         {
-            printk_msg("Cannot read data from userspace");
             return -EFAULT;    
         }
     }
@@ -70,6 +76,10 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     }
 }
 
+int kprobe_entry_handler(struct kprobe *p, struct pt_regs *regs) {
+    return _cleanup(&process_table);
+}
+
 //Copyed from tty driver
 static char *fiber_devnode(struct device *dev, umode_t *mode)
 {
@@ -90,7 +100,6 @@ static int __init fibers_init(void)
     //Allocate a major number
     dev_major = register_chrdev(0, KBUILD_MODNAME, &fops);
     if (dev_major < 0) {
-        printk(KERN_ERR "%s: Failed registering char device\n", KBUILD_MODNAME);
         ret = dev_major;
         goto fail_regchrdev;
     }
@@ -98,7 +107,6 @@ static int __init fibers_init(void)
     //create class for the device
     device_class = class_create(THIS_MODULE, "Fibers");
     if (IS_ERR(device_class)) {
-        printk(KERN_ERR "%s: Failed to create device class\n", KBUILD_MODNAME);
         ret = PTR_ERR(device_class);
         goto fail_classcreate;
     }
@@ -108,7 +116,6 @@ static int __init fibers_init(void)
     //create device
     device = device_create(device_class, NULL, MKDEV(dev_major,0), NULL, KBUILD_MODNAME);
     if (IS_ERR(device)) {
-        printk(KERN_ERR "%s: Failed to create device class\n", KBUILD_MODNAME);
         ret = PTR_ERR(device);
         goto fail_devcreate;
     }
@@ -116,6 +123,11 @@ static int __init fibers_init(void)
     printk(KERN_NOTICE "%s: Module mounted, device registered with major %d \n", KBUILD_MODNAME, dev_major);
 
     hash_init(process_table.htable); //should be destroyed?
+    spin_lock_init(&process_table.lock);
+
+    ret = register_kprobe(&probe);
+    if (ret)
+        goto fail_devcreate; //fail chain
 
     return 0;
 
@@ -131,6 +143,7 @@ static int __init fibers_init(void)
 /* Missing clean_up of data structures */
 static void __exit fibers_exit(void)
 {   
+    unregister_kprobe(&probe);
     device_destroy(device_class, MKDEV(dev_major,0));
     class_unregister(device_class);
     class_destroy(device_class);
