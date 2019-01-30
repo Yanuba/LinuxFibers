@@ -52,17 +52,43 @@ void* thread_routine(void* arg) {
     //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
 
     unsigned long idx = FlsAlloc();
-    printf("! Got fls index: %ld\n", idx);
+    printf("PARENT! Got fls index: %ld\n", idx);
     
     SwitchToFiber(fib2);
-    printf("My pid is bacl from hell\n");
+    printf("PARENT My pid is bacl from hell\n");
     SwitchToFiber(fib2);
-    printf("My pid is bacl from hello\n");
+    printf("PARENT My pid is bacl from hello\n");
 
-    printf("! %d\n", FlsFree(idx));
+    printf("PARENT! %d\n", FlsFree(idx));
     FlsSetValue(idx, 240);
     long long b = FlsGetValue(idx);
-    printf("! %llu\n", b);
+    printf("PARENT! %llu\n", b);
+
+    //fiber_id* fib3 = CreateFiber(4096, thread_routine2, (void *) (unsigned long) 50);
+    //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib3);
+    return 0;
+}
+
+void* thread_routine1(void* arg) {
+    fib = ConvertThreadToFiber();
+    //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib);
+    fiber_t* fib2;// = ConvertThreadToFiber();
+    //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
+    fib2 = CreateFiber(2*4096, thread_routine2, (void *) (unsigned long) 50);
+    //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib2);
+
+    unsigned long idx = FlsAlloc();
+    printf("CHILD! Got fls index: %ld\n", idx);
+    
+    SwitchToFiber(fib2);
+    printf("CHILDMy pid is bacl from hell\n");
+    SwitchToFiber(fib2);
+    printf("CHILDMy pid is bacl from hello\n");
+
+    printf("CHILD! %d\n", FlsFree(idx));
+    FlsSetValue(idx, 240);
+    long long b = FlsGetValue(idx);
+    printf("CHILD! %llu\n", b);
 
     //fiber_id* fib3 = CreateFiber(4096, thread_routine2, (void *) (unsigned long) 50);
     //printf("My pid is %d, the fid get is: %d\n", getpid(), *fib3);
@@ -75,11 +101,20 @@ int main() {
     pthread_t t2;
     pthread_t t3;
     
-    pthread_create(&t1, NULL, thread_routine, NULL);
+    if (fork()) {
+        pthread_create(&t1, NULL, thread_routine, NULL);
+        pthread_join(t1, NULL);
+        return;
+        }
+    else {
+        pthread_create(&t2, NULL, thread_routine1, NULL);
+        pthread_join(t2, NULL);
+        return;
+        }
+    //pthread_create(&t1, NULL, thread_routine, NULL);
     //pthread_create(&t2, NULL, thread_routine, NULL);
     //pthread_create(&t3, NULL, thread_routine, NULL);
 
-    pthread_join(t1, NULL);
     //pthread_join(t2, NULL);
     //pthread_join(t3, NULL);
 

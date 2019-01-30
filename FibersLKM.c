@@ -3,8 +3,11 @@
 #include <linux/uaccess.h>
 
 #include <linux/hashtable.h>
+#include <linux/slab.h>
+
 
 #include <linux/kprobes.h>
+
 
 #include "Fibers_ktypes.h"
 #include "Fibers_ioctls.h"
@@ -12,7 +15,10 @@
 
 struct module_hashtable process_table;
 
+static int fibers_open(struct inode*, struct file*);
+static int fibers_release(struct inode*, struct file*);
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
+
 int kprobe_entry_handler(struct kprobe *, struct pt_regs *);
 
 static int dev_major;
@@ -21,6 +27,8 @@ static struct device *device = NULL;
 
 static struct file_operations fops = {
     .owner = THIS_MODULE,
+    .open = fibers_open,//
+    .release = fibers_release,//
     .unlocked_ioctl = fibers_ioctl,
     .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
 };
@@ -29,6 +37,89 @@ static struct kprobe probe = {
     .pre_handler = kprobe_entry_handler,
     .symbol_name = "do_exit"
 };
+
+static int fibers_open(struct inode* i_node, struct file* filp) {
+    struct process_active *process;
+    
+    unsigned long flags;
+    pid_t tgid;
+
+    tgid = task_tgid_nr(current);
+
+    spin_lock_irqsave(&process_table.lock, flags);
+    hash_for_each_possible(process_table.htable, process, next, tgid)
+    {
+        if (process->tgid == tgid)
+            break;
+    }
+    if (process && process->tgid == tgid)
+    {
+        filp->private_data = process;
+        spin_unlock_irqrestore(&process_table.lock, flags);
+        return 0;
+    }
+
+    process = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
+    if (!process)
+    {
+        spin_unlock_irqrestore(&process_table.lock, flags);
+        return -ENOMEM;
+    }
+    
+    process->tgid = tgid;
+    process->next_fid = 0;
+    INIT_HLIST_HEAD(&process->running_fibers);
+    INIT_HLIST_HEAD(&process->waiting_fibers);
+    INIT_HLIST_NODE(&process->next);
+    spin_lock_init(&(process->lock));
+
+    filp->private_data = process;
+    spin_unlock_irqrestore(&process_table.lock, flags);
+    return 0;
+}
+
+static int fibers_release(struct inode* i_node, struct file* filp) {
+    printk("RELEASE\n");
+    return 0;
+    /*
+    struct process_active   *process;
+    struct fiber_struct     *fiber;
+    struct hlist_node       *n;
+    unsigned long           flags;
+    
+    process = filp->private_data;
+    if (!process)
+        return 0; 
+    
+    //release all fibers of the process
+    spin_lock_irqsave(&process->lock, flags);
+    hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next) {
+        hlist_del(&fiber->next);
+        if (fiber->fls.used_index != NULL)
+            kfree(fiber->fls.used_index);
+        if (fiber->fls.fls != NULL)
+            kvfree(fiber->fls.fls);
+        kfree(fiber);
+    }
+    hlist_for_each_entry_safe(fiber, n, &process->waiting_fibers, next) {
+        hlist_del(&fiber->next);
+        if (fiber->fls.used_index != NULL)
+            kfree(fiber->fls.used_index);
+        if (fiber->fls.fls != NULL)
+            kvfree(fiber->fls.fls);
+        kfree(fiber);
+    }
+    spin_unlock_irqrestore(&process->lock, flags);
+
+    //delete the process from the hashtable
+    spin_lock_irqsave(&process_table.lock, flags);
+    hlist_del(&process->next);
+    spin_unlock_irqrestore(&process_table.lock, flags);
+
+    kfree(process);
+    return 0;
+    */
+}
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
@@ -51,25 +142,25 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     switch(cmd) 
     {        
         case IOCTL_CONVERT:
-            return _ioctl_convert(&process_table, (fiber_t *) arg);
+            return _ioctl_convert(filp->private_data, (fiber_t *) arg);
 
         case IOCTL_CREATE:
-            return _ioctl_create(&process_table, (struct fiber_args*) arg);
+            return _ioctl_create(filp->private_data, (struct fiber_args*) arg);
 
         case IOCTL_SWITCH:
-            return _ioctl_switch(&process_table, (fiber_t *) arg);
+            return _ioctl_switch(filp->private_data, (fiber_t *) arg);
 
         case IOCTL_ALLOC:
-            return _ioctl_alloc(&process_table, (long *) arg);
+            return _ioctl_alloc(filp->private_data, (long *) arg);
 
         case IOCTL_FREE:
-            return _ioctl_free(&process_table, (long *) arg);
+            return _ioctl_free(filp->private_data, (long *) arg);
             
         case IOCTL_GET: 
-            return _ioctl_get(&process_table, (struct fls_args *) arg);
+            return _ioctl_get(filp->private_data, (struct fls_args *) arg);
 
         case IOCTL_SET:
-            return _ioctl_set(&process_table, (struct fls_args *) arg);
+            return _ioctl_set(filp->private_data, (struct fls_args *) arg);
 
         default:
             return -ENOTTY; //return value is caught and errno set accordingly

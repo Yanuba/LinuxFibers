@@ -30,6 +30,7 @@ void *ConvertThreadToFiber()
         _FIBER_DESCRIPTOR = open("/dev/FibersModule", O_RDONLY);
         if (_FIBER_DESCRIPTOR == -1) 
         {
+            printf("FAIL!");
             *id = -1;
             return id;
         }

@@ -7,20 +7,6 @@
 
 #include "Fibers_kioctls.h"
 
-/*
- * Function to find process in hashtable -> convert it into a macro
- * */
-inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
-{
-    struct process_active *ret;
-    hash_for_each_possible(hashtable->htable, ret, next, tgid)
-    {
-        if (ret->tgid == tgid)
-            return ret;
-    }
-    return NULL;
-}
-
 struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
 {
         struct fiber_struct* fiber;
@@ -78,9 +64,8 @@ ERRORS
  *  ConvertTreadtoFiber()
  * */
 
-long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
+long _ioctl_convert(struct process_active *process, fiber_t* arg)
 {    
-    struct process_active   *process;
     struct fiber_struct     *fiber;
 
     unsigned long           flags;
@@ -93,38 +78,16 @@ long _ioctl_convert(struct module_hashtable *hashtable, fiber_t* arg)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
-    process = find_process(hashtable, tgid);
-    
-    if (process) 
-    {   
-        hlist_for_each_entry(fiber, &process->running_fibers, next)
-        {
-            if (fiber->parent_thread == pid) 
-                return -ENOTTY;
-        }
-        goto ALLOCATE_FIBER;
-    }
+    if (!process || process->tgid != tgid)
+        return -ENOTTY;
 
-    //New struct for process info
-    process = (struct process_active *) kmalloc(sizeof(struct process_active), GFP_KERNEL);
-    process->tgid = tgid;
-    process->next_fid = 0;
-    INIT_HLIST_HEAD(&process->running_fibers);
-    INIT_HLIST_HEAD(&process->waiting_fibers);
-    INIT_HLIST_NODE(&process->next);
-    spin_lock_init(&(process->lock));
-    
-    if (spin_trylock_irqsave(&hashtable->lock, flags))
-        hash_add(hashtable->htable, &process->next, tgid);
-    else
-    {   
-        spin_unlock_irqrestore(&hashtable->lock, flags);
-        kfree(process);
-        return -EFAULT;
-    }
-    spin_unlock_irqrestore(&hashtable->lock, flags);
 
-ALLOCATE_FIBER:
+    hlist_for_each_entry(fiber, &process->running_fibers, next)
+    {
+        if (fiber->parent_thread == pid) 
+            return -ENOTTY;
+    }
+        
     spin_lock_irqsave(&process->lock, flags);
     fid = process->next_fid++;
     spin_unlock_irqrestore(&process->lock, flags);
@@ -141,20 +104,18 @@ ALLOCATE_FIBER:
         hlist_del(&fiber->next);
         spin_unlock_irqrestore(&process->lock, flags);
         kfree(fiber);
-        //If the first call of a process fails here, we can create fiber even if we are not in a fiber context
         return -EFAULT;
     }
-    
     return 0;
+    
 }
 
 /*
  *  CreateFiber()
  * */
 
-long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
+long _ioctl_create(struct process_active *process, struct fiber_args *args)
 {
-    struct process_active   *process;
     struct fiber_struct     *fiber;
 
     struct fiber_args       usr_buf;   //buffer to communicate with userspace
@@ -168,10 +129,8 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
     
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
-
-    process = find_process(hashtable, tgid);
     
-    if (!process)
+    if (!process || process->tgid != tgid)
         return -ENOTTY;
     
     spin_lock_irqsave(&process->lock, flags);
@@ -191,14 +150,12 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
         return -EFAULT;
     
     spin_lock_irqsave(&process->lock, flags);
-    fid = process->next_fid++;
-    spin_unlock_irqrestore(&process->lock, flags);
-
-    fiber = allocate_fiber(fid, current, usr_buf.routine, usr_buf.routine_args, usr_buf.stack_address);
     
-    spin_lock_irqsave(&process->lock, flags);
+    fid = process->next_fid++;
+    fiber = allocate_fiber(fid, current, usr_buf.routine, usr_buf.routine_args, usr_buf.stack_address);
     hlist_add_head(&fiber->next, &process->waiting_fibers);
     usr_buf.ret = fiber->fiber_id;
+    
     spin_unlock_irqrestore(&process->lock, flags);
 
     if (copy_to_user((void *) args, (void *) &usr_buf, sizeof(struct fiber_args))) 
@@ -219,12 +176,11 @@ long _ioctl_create(struct module_hashtable *hashtable, struct fiber_args *args)
  * RCU maybe is not suitable since we don't want that in some moment
  * a fiber keep existing as a copy in some other thread
  * */
-long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next) 
+long _ioctl_switch(struct process_active *process, fiber_t* usr_id_next) 
 {
     struct fiber_struct     *switch_prev;
     struct fiber_struct     *switch_next;
     struct fiber_struct     *cursor;
-    struct process_active   *process;
 
     unsigned long           flags;
 
@@ -232,7 +188,7 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
     pid_t tgid; 
     pid_t pid;
-    
+
     switch_prev = NULL;
     switch_next = NULL;
     tgid = task_tgid_nr(current);
@@ -240,10 +196,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 
     if (copy_from_user((void *) &id_next, (void *) usr_id_next, sizeof(fiber_t))) 
         return -EFAULT;
-
-    process = find_process(hashtable, tgid);
     
-    if (!process) 
+    if (!process || process->tgid != tgid)
         return -ENOTTY;
 
     spin_lock_irqsave(&process->lock, flags);
@@ -305,9 +259,8 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
 }  
 
 //
-long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
+long _ioctl_alloc(struct process_active   *process, long* arg)
 {   
-    struct process_active   *process;
     struct fiber_struct     *fiber;
     struct fls_struct       *storage;
 
@@ -320,8 +273,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    process = find_process(hashtable, tgid);
-    if (!process)
+    if (!process || process->tgid != tgid)
         return -ENOTTY;
 
     spin_lock_irqsave(&process->lock, flags);
@@ -374,9 +326,8 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
     }
 }
 
-long _ioctl_free(struct module_hashtable *hashtable, long* arg) 
+long _ioctl_free(struct process_active   *process, long* arg) 
 {
-    struct process_active   *process;
     struct fls_struct       *storage;
     struct fiber_struct     *fiber;
 
@@ -389,9 +340,7 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
     
-    process = find_process(hashtable, tgid);
-    
-    if (!process)
+    if (!process || process->tgid != tgid)
         return -ENOTTY;
 
     spin_lock_irqsave(&process->lock, flags);
@@ -433,9 +382,8 @@ long _ioctl_free(struct module_hashtable *hashtable, long* arg)
        
 }
 
-long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args) 
+long _ioctl_get(struct process_active   *process, struct fls_args* args) 
 {
-    struct process_active   *process;
     struct fls_struct       *storage;
     struct fiber_struct     *fiber;
     
@@ -449,9 +397,7 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
-    process = find_process(hashtable, tgid);
-    
-    if (!process)
+    if (!process || process->tgid != tgid)
         return -ENOTTY;
 
     spin_lock_irqsave(&process->lock, flags);
@@ -497,9 +443,8 @@ long _ioctl_get(struct module_hashtable *hashtable, struct fls_args* args)
     }
 }
 
-long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args) 
+long _ioctl_set(struct process_active   *process, struct fls_args* args) 
 {
-    struct process_active   *process;
     struct fiber_struct     *fiber;
     struct fls_struct       *storage;
     struct fls_args         ret;
@@ -512,9 +457,7 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
         
-    process = find_process(hashtable, tgid);
-    
-    if (!process) 
+    if (!process || process->tgid != tgid)
         return -ENOTTY;
 
     spin_lock_irqsave(&process->lock, flags);
@@ -554,6 +497,21 @@ long _ioctl_set(struct module_hashtable *hashtable, struct fls_args* args)
         return -ENOTTY;
     }
 }
+
+/*
+ * Function to find process in hashtable -> convert it into a macro
+ * */
+inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
+{
+    struct process_active *ret;
+    hash_for_each_possible(hashtable->htable, ret, next, tgid)
+    {
+        if (ret->tgid == tgid)
+            return ret;
+    }
+    return NULL;
+}
+
 
 int _cleanup(struct module_hashtable *hashtable) {
     struct process_active   *process;
