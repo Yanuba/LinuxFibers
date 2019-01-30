@@ -49,7 +49,7 @@ struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void 
         }
 
         fiber->entry_point = (void *) fiber->regs.ip;
-
+        fiber->last_time = get_cpu_time();
         //FLS
         //spin_lock_init(&(fiber->fls.fls_lock));
         fiber->fls.size = -1;
@@ -277,16 +277,19 @@ long _ioctl_switch(struct module_hashtable *hashtable, fiber_t* usr_id_next)
             (void) memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
             (void) memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
             copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
-                
+
+            hlist_del(&(switch_next->next));
+            hlist_del(&(switch_prev->next));
+
             switch_next->activations += 1;
             switch_next->thread_on = pid;
             switch_next->status = FIBER_RUNNING;
             
             switch_prev->status = FIBER_WAITING;
-    
-            hlist_del(&(switch_next->next));
-            hlist_del(&(switch_prev->next));
 
+            switch_next->last_time = get_cpu_time();
+            switch_prev->execution_time += get_cpu_time() - switch_prev->last_time;
+            
             hlist_add_head(&(switch_prev->next), &(process->waiting_fibers));
             hlist_add_head(&(switch_next->next), &(process->running_fibers));
             //preempt_enable();

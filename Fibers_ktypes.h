@@ -13,6 +13,8 @@
 
 #define MAX_FLS_INDEX 1024 //Up to 8Kb for fiber
 
+#define get_cpu_time() ((current->utime)+(current->stime))
+
 /* 
  * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
  * Max pid on this system is 32768, if we exclude pid 0 we can have 32767 different pids,
@@ -63,13 +65,14 @@ struct fiber_struct
     struct fpu fpu_regs;    //FPU state
 
     /* Fields to be exposed in proc */
-    short   status;                 //The fiber is running or not?
-    void   (*entry_point)(void*);  //entry point of the fiber (EIP)
-    pid_t   parent_process;         //key in the hash table
-    pid_t   parent_thread;          //pid of the thread that created the fiber
-    int     activations;            //the number of current activations of the Fiber
-    int     failed_activations;     //the number of failed activations
-    long    execution_time;         //total execution time in that Fiber context
+    short               status;                 //The fiber is running or not?
+    void                (*entry_point)(void*);  //entry point of the fiber (EIP)
+    pid_t               parent_process;         //key in the hash table
+    pid_t               parent_thread;          //pid of the thread that created the fiber
+    int                 activations;            //the number of current activations of the Fiber
+    int                 failed_activations;     //the number of failed activations
+    unsigned long long  execution_time;         //total execution time in that Fiber context
+    unsigned long long  last_time;              //CPU time when the fiber was schedulet last time
 };
 
 #endif /* !FKTYPES */
