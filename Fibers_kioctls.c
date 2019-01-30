@@ -341,7 +341,7 @@ long _ioctl_alloc(struct module_hashtable *hashtable, long* arg)
 
     if (storage->fls == NULL) 
     {
-        storage->fls = vmalloc(sizeof(long long)* MAX_FLS_INDEX); //we are asking for 32Kb (8 pages)
+        storage->fls = kvzalloc(sizeof(long long)* MAX_FLS_INDEX, GFP_KERNEL); //we are asking for 32Kb (8 pages)
         storage->size = 0;
         storage->used_index = kzalloc(sizeof(unsigned long)*BITS_TO_LONGS(MAX_FLS_INDEX), GFP_KERNEL); //1 page
     }
@@ -581,8 +581,8 @@ int _cleanup(struct module_hashtable *hashtable) {
     spin_unlock_irqrestore(&process->lock, flags);
     if (fiber) {
         kfree(fiber->fls.used_index);
-        vfree(fiber->fls.fls);
-        //kfree(fiber);
+        kvfree(fiber->fls.fls);
+        kfree(fiber);
         fiber = NULL;
     }
 
@@ -601,10 +601,10 @@ int _cleanup(struct module_hashtable *hashtable) {
     //fiber is null, free everything
     spin_lock_irqsave(&process->lock, flags);
     hlist_for_each_entry_safe(fiber, n, &process->waiting_fibers, next) {
-        //hlist_del(&fiber->next);
-        //kfree(fiber->fls.used_index);
-        //vfree(fiber->fls.fls);
-        //kfree(fiber);
+        hlist_del(&fiber->next);
+        kfree(fiber->fls.used_index);
+        kvfree(fiber->fls.fls);
+        kfree(fiber);
     }
     spin_unlock_irqrestore(&process->lock, flags);
 
