@@ -96,7 +96,27 @@ void* thread_routine1(void* arg) {
 }
 
 int main() {
-    
+    fiber_t *fib;
+    fiber_t *fib2;
+
+    fib = ConvertThreadToFiber();
+    fib2 =ConvertThreadToFiber();
+    if (*fib2 == -1) {
+        printf("P Fallita\n");
+    }
+
+
+    if (fork() == 0) {
+        fib2 = ConvertThreadToFiber();
+        if (*fib2 == -1)
+            printf("C Fallita\n");
+        fib2 = CreateFiber(2*4096, thread_routine2, (void *) (unsigned long) 50);;
+        if (*fib2 == -1)
+            printf("C Fallita di nuovo\n");
+        SwitchToFiber(fib2);
+    }
+
+    /*
     pthread_t t1;
     pthread_t t2;
     pthread_t t3;
@@ -119,6 +139,6 @@ int main() {
     //pthread_join(t3, NULL);
 
     //ConvertThreadToFiber();
-
+    */
     return 0;
 }

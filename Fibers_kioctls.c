@@ -7,7 +7,7 @@
 
 #include "Fibers_kioctls.h"
 
-struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
+inline struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
 {
         struct fiber_struct* fiber;
 

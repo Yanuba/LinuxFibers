@@ -5,12 +5,16 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/syscall.h>
 #include <sys/ioctl.h>
 #include <strings.h>
+#include <errno.h>
+
 
 #include "Fibers.h"
 #include "Fibers_ioctls.h"
 
+pid_t _CALLER_PID;
 int _FIBER_DESCRIPTOR = -1;
 bool _DESCRIPTOR_GUARD = false;
 
@@ -22,7 +26,8 @@ bool _DESCRIPTOR_GUARD = false;
 void *ConvertThreadToFiber() 
 {    
     fiber_t *id;
-    
+    int ret;
+
     id = (fiber_t *) malloc(sizeof(fiber_t)); 
 
     if (_DESCRIPTOR_GUARD == false) 
@@ -30,11 +35,32 @@ void *ConvertThreadToFiber()
         _FIBER_DESCRIPTOR = open("/dev/FibersModule", O_RDONLY);
         if (_FIBER_DESCRIPTOR == -1) 
         {
-            printf("FAIL!");
+            printf("FAIL!\n");
             *id = -1;
             return id;
         }
-        else _DESCRIPTOR_GUARD = true;
+        else 
+        {
+            _CALLER_PID = getpid();
+            _DESCRIPTOR_GUARD = true;
+        }
+    }
+    else if (_CALLER_PID != getpid()) 
+    {
+        close(_FIBER_DESCRIPTOR);
+        _FIBER_DESCRIPTOR = open("/dev/FibersModule", O_RDONLY);
+        if (_FIBER_DESCRIPTOR == -1) 
+        {
+            _DESCRIPTOR_GUARD = false;
+            *id = -1;
+            return id;
+        }
+        else 
+        {
+            _CALLER_PID = getpid();
+            _DESCRIPTOR_GUARD = true;
+        }
+
     }
     
     if (ioctl(_FIBER_DESCRIPTOR, IOCTL_CONVERT, id)) 

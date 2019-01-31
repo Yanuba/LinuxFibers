@@ -79,7 +79,6 @@ static int fibers_open(struct inode* i_node, struct file* filp) {
 }
 
 static int fibers_release(struct inode* i_node, struct file* filp) {
-    printk("RELEASE\n");
     return 0;
     /*
     struct process_active   *process;
