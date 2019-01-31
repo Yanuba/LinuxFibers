@@ -498,13 +498,12 @@ long _ioctl_set(struct process_active   *process, struct fls_args* args)
     }
 }
 
-/*
- * Function to find process in hashtable -> convert it into a macro
- * */
+
 inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
 {
-    struct process_active *ret;
-    hash_for_each_possible(hashtable->htable, ret, next, tgid)
+    struct process_active   *ret;
+    struct hlist_node       *n;
+    hash_for_each_possible_safe(hashtable->htable, ret, n, next, tgid)
     {
         if (ret->tgid == tgid)
             return ret;
@@ -526,11 +525,14 @@ int _cleanup(struct module_hashtable *hashtable) {
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
 
+    //the interrupt state is restored at the end of the cleanup
+    spin_lock_irqsave(&hashtable->lock, flags);
+
     process = find_process(hashtable, tgid);
     if (!process)
         goto exit_cleanup;
 
-    spin_lock_irqsave(&process->lock, flags);
+    spin_lock_irq(&process->lock);
     hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next) {
         if (fiber->thread_on == pid) {
             hlist_del(&fiber->next);
@@ -539,7 +541,7 @@ int _cleanup(struct module_hashtable *hashtable) {
     }
     if (fiber->thread_on != pid)
         fiber = NULL;
-    spin_unlock_irqrestore(&process->lock, flags);
+    spin_unlock_irq(&process->lock);
     if (fiber) {
         kfree(fiber->fls.used_index);
         kvfree(fiber->fls.fls);
@@ -548,32 +550,29 @@ int _cleanup(struct module_hashtable *hashtable) {
     }
 
     //check if it was the last one;
-    spin_lock_irqsave(&process->lock, flags);
+    spin_lock_irq(&process->lock);
     hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next)
         break;
     if (fiber) {
-        spin_unlock_irqrestore(&process->lock, flags);
+        spin_unlock_irq(&process->lock);
         goto exit_cleanup;
     }
-    spin_unlock_irqrestore(&process->lock, flags);
+    spin_unlock_irq(&process->lock);
 
-    printk("REACHED ONLY ONCE\n");
-    
     //fiber is null, free everything
-    spin_lock_irqsave(&process->lock, flags);
+    spin_lock_irq(&process->lock);
     hlist_for_each_entry_safe(fiber, n, &process->waiting_fibers, next) {
         hlist_del(&fiber->next);
         kfree(fiber->fls.used_index);
         kvfree(fiber->fls.fls);
         kfree(fiber);
     }
-    spin_unlock_irqrestore(&process->lock, flags);
+    spin_unlock_irq(&process->lock);
 
-    spin_lock_irqsave(&hashtable->lock, flags);
     hlist_del(&process->next);
-    spin_unlock_irqrestore(&hashtable->lock, flags);
-    
     kfree(process);
+    
 exit_cleanup:
+    spin_unlock_irqrestore(&hashtable->lock, flags);
     return 0;
 }

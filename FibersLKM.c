@@ -5,9 +5,7 @@
 #include <linux/hashtable.h>
 #include <linux/slab.h>
 
-
 #include <linux/kprobes.h>
-
 
 #include "Fibers_ktypes.h"
 #include "Fibers_ioctls.h"
@@ -27,11 +25,11 @@ static struct device *device = NULL;
 
 static struct file_operations fops = {
     .owner = THIS_MODULE,
-    .open = fibers_open,//
-    .release = fibers_release,//
+    .open = fibers_open,
+    .release = fibers_release,
     .unlocked_ioctl = fibers_ioctl,
-    .compat_ioctl = fibers_ioctl, //for 32 bit on 64, works?
-};
+    .compat_ioctl = fibers_ioctl,
+    };
 
 static struct kprobe probe = {
     .pre_handler = kprobe_entry_handler,
@@ -80,44 +78,6 @@ static int fibers_open(struct inode* i_node, struct file* filp) {
 
 static int fibers_release(struct inode* i_node, struct file* filp) {
     return 0;
-    /*
-    struct process_active   *process;
-    struct fiber_struct     *fiber;
-    struct hlist_node       *n;
-    unsigned long           flags;
-    
-    process = filp->private_data;
-    if (!process)
-        return 0; 
-    
-    //release all fibers of the process
-    spin_lock_irqsave(&process->lock, flags);
-    hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next) {
-        hlist_del(&fiber->next);
-        if (fiber->fls.used_index != NULL)
-            kfree(fiber->fls.used_index);
-        if (fiber->fls.fls != NULL)
-            kvfree(fiber->fls.fls);
-        kfree(fiber);
-    }
-    hlist_for_each_entry_safe(fiber, n, &process->waiting_fibers, next) {
-        hlist_del(&fiber->next);
-        if (fiber->fls.used_index != NULL)
-            kfree(fiber->fls.used_index);
-        if (fiber->fls.fls != NULL)
-            kvfree(fiber->fls.fls);
-        kfree(fiber);
-    }
-    spin_unlock_irqrestore(&process->lock, flags);
-
-    //delete the process from the hashtable
-    spin_lock_irqsave(&process_table.lock, flags);
-    hlist_del(&process->next);
-    spin_unlock_irqrestore(&process_table.lock, flags);
-
-    kfree(process);
-    return 0;
-    */
 }
 
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
