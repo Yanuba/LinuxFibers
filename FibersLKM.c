@@ -9,6 +9,7 @@
 
 #include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
+#include "proc.h"
 
 struct module_hashtable process_table;
 
@@ -16,7 +17,11 @@ static int fibers_open(struct inode*, struct file*);
 static int fibers_release(struct inode*, struct file*);
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
 
-int kprobe_entry_handler(struct kprobe *, struct pt_regs *);
+int kprobe_cleanup_handler(struct kprobe *, struct pt_regs *);
+
+//proc
+int kprobe_proc_lookup_handler(struct kprobe*, struct pt_regs *);
+int kprobe_proc_reddir_handler(struct kprobe*, struct pt_regs *);
 
 static int dev_major;
 static struct class *device_class = NULL;
@@ -31,9 +36,22 @@ static struct file_operations fops = {
     };
 
 static struct kprobe probe = {
-    .pre_handler = kprobe_entry_handler,
+    .pre_handler = kprobe_cleanup_handler,
     .symbol_name = "do_exit"
 };
+
+//proc
+static struct kprobe reddir_probe = {
+    .pre_handler = kprobe_proc_reddir_handler,
+    .symbol_name = "proc_pdent_reddir"
+};
+
+static struct kprobe lookup_probe = {
+    .pre_handler = kprobe_proc_lookup_handler,
+    .symbol_name = "proc_pdent_lookup"
+};
+
+
 
 static int fibers_open(struct inode* i_node, struct file* filp) {
     struct process_active *process;
@@ -125,8 +143,18 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
     }
 }
 
-int kprobe_entry_handler(struct kprobe *p, struct pt_regs *regs) {
+int kprobe_cleanup_handler(struct kprobe *p, struct pt_regs *regs) {
     return _cleanup(&process_table);
+}
+
+//proc
+
+int kprobe_lookup_handler(struct kprobe *p, struct pt_regs *regs) {
+    return _lookup_handler(&process_table, regs);
+}
+
+int kprobe_reddir_handler(struct kprobe *p, struct pt_regs *regs) {
+    return _reddir_handler(&process_table, regs);
 }
 
 //Copyed from tty driver
@@ -178,8 +206,20 @@ static int __init fibers_init(void)
     if (ret)
         goto fail_devcreate; //fail chain
 
+    ret = register_kprobe(&lookup_probe);
+    if (ret)
+        goto fail_lookup_register;
+    
+    ret = register_kprobe(&reddir_probe);
+    if (ret)
+        goto fail_reddir_register;
+
     return 0;
 
+    fail_reddir_register:
+        unregister_kprobe(&lookup_probe);
+    fail_lookup_register:
+        unregister_kprobe(&probe);
     fail_devcreate:
         class_unregister(device_class);
         class_destroy(device_class);
@@ -193,6 +233,8 @@ static int __init fibers_init(void)
 static void __exit fibers_exit(void)
 {   
     unregister_kprobe(&probe);
+    unregister_kprobe(&lookup_probe);
+    unregister_kprobe(&reddir_probe);
     device_destroy(device_class, MKDEV(dev_major,0));
     class_unregister(device_class);
     class_destroy(device_class);
