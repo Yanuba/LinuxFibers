@@ -104,15 +104,11 @@ static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg
 
     if (_IOC_DIR(cmd) & _IOC_READ) {
         if (!access_ok(VERIFY_WRITE, arg, _IOC_SIZE(cmd)))
-        {
             return -EFAULT;        
-        }
     }
     else {
         if (!access_ok(VERIFY_READ, arg, _IOC_SIZE(cmd)))
-        {
             return -EFAULT;    
-        }
     }
 
     switch(cmd) 

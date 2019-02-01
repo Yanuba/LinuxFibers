@@ -8,7 +8,7 @@
 #include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
 
-inline struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
+static inline struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
 {
         struct fiber_struct* fiber;
 
@@ -61,10 +61,6 @@ ERRORS
               the file descriptor fd references.
 */
 
-/*
- *  ConvertTreadtoFiber()
- * */
-
 long _ioctl_convert(struct process_active *process, fiber_t* arg)
 {    
     struct fiber_struct     *fiber;
@@ -110,10 +106,6 @@ long _ioctl_convert(struct process_active *process, fiber_t* arg)
     return 0;
     
 }
-
-/*
- *  CreateFiber()
- * */
 
 long _ioctl_create(struct process_active *process, struct fiber_args *args)
 {
@@ -172,11 +164,6 @@ long _ioctl_create(struct process_active *process, struct fiber_args *args)
     
 }
 
-/*
- * Need a review - need strong memory barriers
- * RCU maybe is not suitable since we don't want that in some moment
- * a fiber keep existing as a copy in some other thread
- * */
 long _ioctl_switch(struct process_active *process, fiber_t* usr_id_next) 
 {
     struct fiber_struct     *switch_prev;
@@ -259,7 +246,6 @@ long _ioctl_switch(struct process_active *process, fiber_t* usr_id_next)
     return -ENOTTY;
 }  
 
-//
 long _ioctl_alloc(struct process_active   *process, long* arg)
 {   
     struct fiber_struct     *fiber;
