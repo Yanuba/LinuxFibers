@@ -7,7 +7,6 @@
 
 #include <linux/kprobes.h>
 
-#include "Fibers_ktypes.h"
 #include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
 

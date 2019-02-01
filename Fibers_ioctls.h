@@ -5,6 +5,22 @@
 
 #define IOCTL_MAGIC_NUM ']' //it is not used by any device driver (it should be safe)
 
+typedef pid_t fiber_t;
+
+struct fiber_args
+{
+    void* stack_address;
+    void (*routine)(void *);
+    void* routine_args;
+    fiber_t ret;
+};
+
+struct fls_args
+{
+    unsigned long   index;
+    long long       value;        
+};
+
 //IOR return data to userland, IOW read data from userland
 #define IOCTL_CONVERT _IOR(IOCTL_MAGIC_NUM, 0, fiber_t)
 #define IOCTL_CREATE _IOWR(IOCTL_MAGIC_NUM, 1, struct fiber_args)

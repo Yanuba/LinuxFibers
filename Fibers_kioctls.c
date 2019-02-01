@@ -5,6 +5,7 @@
 //for fpu
 #include <asm/fpu/internal.h>
 
+#include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
 
 inline struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
