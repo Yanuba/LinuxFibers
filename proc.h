@@ -8,7 +8,7 @@ int _lookup_handler(struct module_hashtable*, struct pt_regs*);
 int _readdir_handler(struct module_hashtable*, struct pt_regs*);
 /** 
  * at the end we don't care of this
- * We leave this here so the compiler don't cry
+ * We leave this here so the compiler doesn't cry
  */
 union proc_op {
   int (*proc_get_link)(struct dentry *, struct path *);
