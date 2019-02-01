@@ -486,16 +486,14 @@ long _ioctl_set(struct process_active   *process, struct fls_args* args)
 }
 
 
-inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
+static inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
 {
     struct process_active   *ret;
     struct hlist_node       *n;
     hash_for_each_possible_safe(hashtable->htable, ret, n, next, tgid)
     {
-        if (ret->tgid == tgid) {
-            printk(KERN_NOTICE "PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA\n");
+        if (ret->tgid == tgid)
             return ret;
-        }
             
     }
     return NULL;

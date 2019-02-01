@@ -1,4 +1,9 @@
 #include "proc.h"
+#include <linux/slab.h>
+
+
+struct file_operations fops;
+struct inode_operations iops;
 
 static inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
 {
@@ -6,13 +11,13 @@ static inline struct process_active* find_process(struct module_hashtable *hasht
     struct hlist_node       *n;
     hash_for_each_possible_safe(hashtable->htable, ret, n, next, tgid)
     {
-        //printk(KERN_NOTICE KBUILD_MODNAME ": Item in Htable\n");
+        
         if (ret->tgid == tgid) {
-            //printk(KERN_NOTICE KBUILD_MODNAME ": Found Pid\n");
+            
             return ret;
         }           
     }
-    //printk(KERN_NOTICE KBUILD_MODNAME ": No item in Htable\n");
+    
     return NULL;
 }
 
@@ -30,6 +35,8 @@ int _readdir_handler(struct module_hashtable* process_table, struct pt_regs* reg
     unsigned int nents;
     unsigned long folder_pid;
     struct process_active *process;
+    struct pid_entry* new_ents;
+    struct pid_entry fiber_folder = DIR("Fibers", S_IRUGO|S_IXUGO, iops, fops);
 
     file = (struct file*) regs->di;
     ctx = (struct dir_context*) regs->si;
@@ -41,16 +48,21 @@ int _readdir_handler(struct module_hashtable* process_table, struct pt_regs* reg
     
     process = find_process(process_table, folder_pid);
     
-    printk(KERN_NOTICE KBUILD_MODNAME " : pid; %ld process\n", folder_pid);
+    
 
     if (!process)
     {
-        printk(KERN_NOTICE KBUILD_MODNAME " : Stamo naa folder sbajata porcammerda.\n");
+        //printk(KERN_NOTICE KBUILD_MODNAME " : Stamo naa folder sbajata porcammerda.\n");
         return 0;
     }
-          
-    printk(KERN_NOTICE KBUILD_MODNAME " : pid; %ld process: %d\n", folder_pid, process->tgid);
 
+    new_ents = kmalloc(sizeof(struct pid_entry)*(nents+1), GFP_KERNEL);     
+    //printk(KERN_NOTICE KBUILD_MODNAME " : pid; %ld process: %d\n", folder_pid, process->tgid);
+    memcpy(new_ents, ents, sizeof(struct pid_entry)*nents);
+    memcpy(&new_ents[nents], &fiber_folder, sizeof(struct pid_entry));
+
+    regs->dx = new_ents;
+    regs->cx = nents+1;
 
     printk(KERN_NOTICE KBUILD_MODNAME " : _readdir_handler function terminated.\n");
     return 0;

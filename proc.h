@@ -24,14 +24,14 @@ struct pid_entry {
   union proc_op op;
 };
 
-//maro to define a directory in proc
+//macro to define a directory in proc
 #define NOD(NAME, MODE, IOP, FOP, OP) { \
-  .name = (NAME),              \
-  .len  = sizeof(NAME) - 1,      \
-  .mode = MODE,              \
-  .iop  = IOP,              \
-  .fop  = FOP,              \
-  .op   = OP,                  \
+  .name = (NAME),                       \
+  .len  = sizeof(NAME) - 1,             \
+  .mode = MODE,                         \
+  .iop  = IOP,                          \
+  .fop  = FOP,                          \
+  .op   = OP,                           \
 }
 
 #define DIR(NAME, MODE, iops, fops)  \
