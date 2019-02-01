@@ -492,12 +492,14 @@ inline struct process_active* find_process(struct module_hashtable *hashtable, p
     struct hlist_node       *n;
     hash_for_each_possible_safe(hashtable->htable, ret, n, next, tgid)
     {
-        if (ret->tgid == tgid)
+        if (ret->tgid == tgid) {
+            printk(KERN_NOTICE "PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA\n");
             return ret;
+        }
+            
     }
     return NULL;
 }
-
 
 int _cleanup(struct module_hashtable *hashtable) {
     struct process_active   *process;
@@ -516,9 +518,9 @@ int _cleanup(struct module_hashtable *hashtable) {
     spin_lock_irqsave(&hashtable->lock, flags);
 
     process = find_process(hashtable, tgid);
-    if (!process)
+    if (!process) {
         goto exit_cleanup;
-
+    }
     spin_lock_irq(&process->lock);
     hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next) {
         if (fiber->thread_on == pid) {
@@ -536,6 +538,7 @@ int _cleanup(struct module_hashtable *hashtable) {
         fiber = NULL;
     }
 
+    printk(KERN_NOTICE "PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA\n");
     //check if it was the last one;
     spin_lock_irq(&process->lock);
     hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next)

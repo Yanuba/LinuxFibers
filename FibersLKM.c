@@ -86,6 +86,8 @@ static int fibers_open(struct inode* i_node, struct file* filp) {
     spin_lock_init(&(process->lock));
 
     filp->private_data = process;
+
+    hash_add(process_table.htable, &process->next, tgid);
     spin_unlock_irqrestore(&process_table.lock, flags);
     return 0;
 }
