@@ -2,10 +2,16 @@
 #define _PROC_H
 
 #include <linux/fs.h> //struct file, struct dir context, 
+#include <linux/kprobes.h>
+
 #include "Fibers_kioctls.h"
 
-int _lookup_handler(struct module_hashtable*, struct pt_regs*);
-int _readdir_handler(struct module_hashtable*, struct pt_regs*);
+//creates entries under /proc/PID/fibers
+//int our_proc_readdir(struct file *file, struct dir_context *ctx);
+
+//dentries to be shown in /proc/PID/fibers/
+//struct dentry *our_proc_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
+
 /** 
  * at the end we don't care of this
  * We leave this here so the compiler doesn't cry
@@ -36,6 +42,7 @@ struct pid_entry {
 
 #define DIR(NAME, MODE, iops, fops)  \
   NOD(NAME, (S_IFDIR|(MODE)), &iops, &fops, {} )
+
 //for fop we have to implement readdir
 //for iops we have to implement the lookup in order to enumerate the files in the folder
 //      there we allocate the actual files (dentries) to be shown undef fibers
@@ -44,5 +51,17 @@ struct pid_entry {
 //we want to probe these two
 //static int proc_pident_readdir(struct file *file, struct dir_context *ctx, const struct pid_entry *ents, unsigned int nents)
 //static struct dentry *proc_pident_lookup(struct inode *dir, struct dentry *dentry, const struct pid_entry *ents, unsigned int nents)
+
+typedef struct  dentry *(*proc_pident_lookup_t) (struct inode *, struct dentry *, const struct pid_entry *, unsigned int);
+typedef int (*proc_pident_readdir_t) (struct file *, struct dir_context *, const struct pid_entry *, unsigned int);
+
+void _set_proc_dirent_lookup_from_kprobes(struct kprobe*);
+void _set_proc_dirent_readdir_from_kprobes(struct kprobe*);
+
+int _lookup_handler(struct module_hashtable*, struct pt_regs*);
+int _readdir_handler(struct module_hashtable*, struct pt_regs*);
+
+int fibers_readdir(struct file *, struct dir_context *);
+struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags);
 
 #endif /* !_PROC_H */

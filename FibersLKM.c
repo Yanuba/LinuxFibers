@@ -48,8 +48,6 @@ static struct kprobe lookup_probe = {
     .symbol_name = "proc_pident_lookup"
 };
 
-
-
 static int fibers_open(struct inode* i_node, struct file* filp) {
     struct process_active *process;
     
@@ -209,6 +207,9 @@ static int __init fibers_init(void)
     if (ret)
         goto fail_readdir_register;
 
+    _set_proc_dirent_lookup_from_kprobes(&lookup_probe);
+    _set_proc_dirent_readdir_from_kprobes(&readdir_probe);
+    
     return 0;
 
     fail_readdir_register:

@@ -536,7 +536,6 @@ int _cleanup(struct module_hashtable *hashtable) {
         fiber = NULL;
     }
 
-    printk(KERN_NOTICE "PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA PUTA MIERDA\n");
     //check if it was the last one;
     spin_lock_irq(&process->lock);
     hlist_for_each_entry_safe(fiber, n, &process->running_fibers, next)
