@@ -2,7 +2,10 @@
 #define _PROC_H
 
 #include <linux/fs.h> //struct file, struct dir context, 
+#include "Fibers_kioctls.h"
 
+int _lookup_handler(struct module_hashtable*, struct pt_regs*);
+int _readdir_handler(struct module_hashtable*, struct pt_regs*);
 /** 
  * at the end we don't care of this
  * We leave this here so the compiler don't cry

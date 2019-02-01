@@ -3,7 +3,7 @@ make
 sudo insmod FibersModule.ko
 cd ./2018-fibers
 make
-./test 10
+./test 1000
 make clean
 cd ..
 make clean

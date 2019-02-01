@@ -1,13 +1,10 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/uaccess.h>
-
 #include <linux/hashtable.h>
 #include <linux/slab.h>
-
 #include <linux/kprobes.h>
 
-#include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
 #include "proc.h"
 
@@ -21,7 +18,7 @@ int kprobe_cleanup_handler(struct kprobe *, struct pt_regs *);
 
 //proc
 int kprobe_proc_lookup_handler(struct kprobe*, struct pt_regs *);
-int kprobe_proc_reddir_handler(struct kprobe*, struct pt_regs *);
+int kprobe_proc_readdir_handler(struct kprobe*, struct pt_regs *);
 
 static int dev_major;
 static struct class *device_class = NULL;
@@ -41,14 +38,14 @@ static struct kprobe probe = {
 };
 
 //proc
-static struct kprobe reddir_probe = {
-    .pre_handler = kprobe_proc_reddir_handler,
-    .symbol_name = "proc_pdent_reddir"
+static struct kprobe readdir_probe = {
+    .pre_handler = kprobe_proc_readdir_handler,
+    .symbol_name = "proc_pident_readdir"
 };
 
 static struct kprobe lookup_probe = {
     .pre_handler = kprobe_proc_lookup_handler,
-    .symbol_name = "proc_pdent_lookup"
+    .symbol_name = "proc_pident_lookup"
 };
 
 
@@ -145,12 +142,12 @@ int kprobe_cleanup_handler(struct kprobe *p, struct pt_regs *regs) {
 
 //proc
 
-int kprobe_lookup_handler(struct kprobe *p, struct pt_regs *regs) {
+int kprobe_proc_lookup_handler(struct kprobe *p, struct pt_regs *regs) {
     return _lookup_handler(&process_table, regs);
 }
 
-int kprobe_reddir_handler(struct kprobe *p, struct pt_regs *regs) {
-    return _reddir_handler(&process_table, regs);
+int kprobe_proc_readdir_handler(struct kprobe *p, struct pt_regs *regs) {
+    return _readdir_handler(&process_table, regs);
 }
 
 //Copyed from tty driver
@@ -206,13 +203,13 @@ static int __init fibers_init(void)
     if (ret)
         goto fail_lookup_register;
     
-    ret = register_kprobe(&reddir_probe);
+    ret = register_kprobe(&readdir_probe);
     if (ret)
-        goto fail_reddir_register;
+        goto fail_readdir_register;
 
     return 0;
 
-    fail_reddir_register:
+    fail_readdir_register:
         unregister_kprobe(&lookup_probe);
     fail_lookup_register:
         unregister_kprobe(&probe);
@@ -230,7 +227,7 @@ static void __exit fibers_exit(void)
 {   
     unregister_kprobe(&probe);
     unregister_kprobe(&lookup_probe);
-    unregister_kprobe(&reddir_probe);
+    unregister_kprobe(&readdir_probe);
     device_destroy(device_class, MKDEV(dev_major,0));
     class_unregister(device_class);
     class_destroy(device_class);

@@ -5,6 +5,7 @@
 #include <linux/ptrace.h>
 #include <linux/hashtable.h>
 #include <asm/fpu/types.h>
+#include "Fibers_ioctls.h"
 
 #define FIBER_RUNNING 1
 #define FIBER_WAITING 0
