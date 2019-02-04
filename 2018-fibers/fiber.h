@@ -1,9 +1,8 @@
 #pragma once
 
-#include "../Fibers.h"
+#define KERNEL
 
-#ifndef USERSPACE
-#define USERSPACE
+#ifdef USERSPACE
 
 #include "src/ult.h"
 
@@ -17,6 +16,8 @@
 
 #else
 
+#include "../Fibers.h"
+
 // TODO:
 // Here you should point to the invocation of your code!
 // See README.md for further details.
@@ -29,4 +30,4 @@
 #define FlsGetValue(dwFlsIndex) FlsGetValue(dwFlsIndex)
 #define FlsSetValue(dwFlsIndex, lpFlsData) FlsSetValue(dwFlsIndex, lpFlsData)
 
-#endif /* !USERSPACE */
+#endif /* USERSPACE */
