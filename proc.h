@@ -3,6 +3,7 @@
 
 #include <linux/fs.h> //struct file, struct dir context, 
 #include <linux/kprobes.h>
+#include <linux/uaccess.h>
 
 #include "Fibers_kioctls.h"
 
@@ -63,6 +64,8 @@ int _readdir_handler(struct module_hashtable*, struct pt_regs*);
 int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct module_hashtable* process_table);
 
 int fibers_readdir(struct file *, struct dir_context *);
+ssize_t fiber_read(struct file *, char __user *, size_t, loff_t *);
+ssize_t fiber_read_handler(struct file *, char __user *, size_t, loff_t *, struct module_hashtable*);
 struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags);
 
 #endif /* !_PROC_H */

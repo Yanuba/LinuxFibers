@@ -24,7 +24,7 @@ struct inode_operations iops = {
 }; //lookup tells we have other inode to see, what we should do here?
 
 struct file_operations fiber_ops = {
-    .read = NULL,
+    .read = fiber_read,
 };
 
 struct pid_entry fiber_folder = DIR("fibers", S_IRUGO|S_IXUGO, iops, fops);
@@ -173,6 +173,64 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
     kfree(ents);
 
     return ret_val;
+}
+
+ssize_t fiber_read_handler(struct file* file, char __user* buff, size_t count, loff_t* f_pos, struct module_hashtable* process_table){
+    
+    char fiber_info[512];
+    unsigned long fiber_id;
+    unsigned long pid;
+    size_t bytes_written, offset;
+    struct process_active* process;
+    struct fiber_struct* fiber;
+
+    if (kstrtoul(file->f_path.dentry->d_name.name, 10, &fiber_id)) 
+        return 0;
+
+    if (kstrtoul(file->f_path.dentry->d_parent->d_parent->d_name.name, 10, &pid)) 
+        return 0;
+
+    process = find_process(process_table, pid);
+
+    if (!process)
+    {
+        return 0;
+    }
+
+    hlist_for_each_entry(fiber, &process->running_fibers, next){
+        
+        if (fiber->fiber_id == fiber_id) goto PRINT;
+        
+    }
+
+    hlist_for_each_entry(fiber, &process->waiting_fibers, next){
+        if (fiber->fiber_id == fiber_id) goto PRINT;
+    }
+    return 0;
+
+    PRINT:
+
+    bytes_written = snprintf(fiber_info, 512, "Status: %s\n"
+                                    "Initial entry point: 0x%lX\n"
+                                    "Parent thread: %d\n"
+                                    "Number of activations: %d\n"
+                                    "Number of failed activations: %d\n"
+                                    "Total execution time: %llu ns\n", 
+                                    ((fiber->status == 0) ? "WAITING" : "RUNNING"),
+                                    (unsigned long) fiber->entry_point,
+                                    fiber->parent_thread, fiber->activations,
+                                    fiber->failed_activations,
+                                    fiber->execution_time);
+
+    if (*f_pos >= bytes_written)
+        return 0;
+
+    offset = (count < bytes_written) ? count : bytes_written;
+    if (copy_to_user(buff, fiber_info, offset))
+        return -EFAULT;
+
+    *f_pos += offset;
+    return offset;
 }
 
 struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags) {

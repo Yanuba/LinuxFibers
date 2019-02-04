@@ -165,6 +165,10 @@ int fibers_readdir(struct file *file, struct dir_context *ctx){
     return fibers_readdir_handler(file, ctx, &process_table);
 }
 
+ssize_t fiber_read(struct file * file, char __user * buff, size_t count, loff_t * f_pos){
+    return fiber_read_handler(file, buff, count, f_pos, &process_table);
+}
+
 static int __init fibers_init(void) 
 {   
     int ret;
