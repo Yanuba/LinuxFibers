@@ -5,13 +5,13 @@ SRC = 	src/calqueue.c \
 		src/model.c \
 		src/numerical.c \
 		src/thread.c \
-		src/ult.c \
-		../Fibers.c		
-CFLAGS = -O3
+		src/ult.c
+		
+CFLAGS = -O3 -I../Userspace/include -I../Kernelspace/include
 EXEC = test
 OBJS := $(SRC:%.c=%.o)
-OBJS := $(OBJS:%.S=%.o)
-LIBS = -lm -lpthread
+OBJS := $(OBJS:%.S=%.o) ../Userspace/Fibers.o
+LIBS = -lm -lpthread 
 
 all: $(EXEC)
 
