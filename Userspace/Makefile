@@ -2,7 +2,7 @@ CC = gcc
 SRC = src/Fibers.c
 CFLAGS = -O3 -Wall
 OBJS := $(SRC:%.c=%.o)
-INCLUDE = -Iinclude
+INCLUDE = -Iinclude -I..
 
 all: $(OBJS)
 
