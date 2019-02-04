@@ -150,6 +150,7 @@ int kprobe_proc_readdir_handler(struct kprobe *p, struct pt_regs *regs) {
     return _readdir_handler(&process_table, regs);
 }
 
+
 //Copyed from tty driver
 static char *fiber_devnode(struct device *dev, umode_t *mode)
 {
@@ -167,6 +168,10 @@ int fibers_readdir(struct file *file, struct dir_context *ctx){
 
 ssize_t fiber_read(struct file * file, char __user * buff, size_t count, loff_t * f_pos){
     return fiber_read_handler(file, buff, count, f_pos, &process_table);
+}
+
+struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags){
+    return fibers_lookup_handler(dir, dentry, flags, &process_table);
 }
 
 static int __init fibers_init(void) 

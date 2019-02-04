@@ -48,7 +48,7 @@ static inline struct process_active* find_process(struct module_hashtable *hasht
 //apparently does nothing
 int _lookup_handler(struct module_hashtable* process_table, struct pt_regs* regs)
 {   
-    /*
+    
     struct inode *dir;
     struct dentry *dentry;
     struct pid_entry* ents;
@@ -79,8 +79,8 @@ int _lookup_handler(struct module_hashtable* process_table, struct pt_regs* regs
     regs->dx = new_ents;
     regs->cx = nents+1;
 
-    printk(KERN_NOTICE KBUILD_MODNAME " : _lookup_handler function activated.\n");
-    */
+    //printk(KERN_NOTICE KBUILD_MODNAME " : _lookup_handler function activated.\n");
+    
     return 0;
 }
 
@@ -233,8 +233,55 @@ ssize_t fiber_read_handler(struct file* file, char __user* buff, size_t count, l
     return offset;
 }
 
-struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags) {
-    return NULL;
+struct dentry* fibers_lookup_handler(struct inode *dir, struct dentry *dentry, unsigned int flags, struct module_hashtable* process_table) {
+    unsigned long folder_pid;
+    struct process_active* process;
+    struct pid_entry* ents;
+    struct fiber_struct* fiber;
+    unsigned int next;  
+    unsigned int nents;
+    struct dentry* ret_val;
+
+    if (kstrtoul(dentry->d_parent->d_name.name, 10, &folder_pid)) 
+        return 0;
+    
+    //may use a lock
+    process = find_process(process_table, folder_pid);
+
+    if (!process)
+    {
+        return 0;
+    }
+
+    next = process->next_fid;
+
+    ents = kmalloc(sizeof(struct pid_entry)*next, GFP_KERNEL);
+    nents = 0;
+    hlist_for_each_entry(fiber, &process->running_fibers, next){
+        ents[nents].name = fiber->name;
+        ents[nents].len = strlen(fiber->name);
+        ents[nents].mode = S_IFREG | S_IRUGO;
+        ents[nents].iop = NULL;
+        ents[nents].fop = &fiber_ops;
+
+        nents++;
+    }
+
+    hlist_for_each_entry(fiber, &process->waiting_fibers, next){
+        ents[nents].name = fiber->name;
+        ents[nents].len = strlen(fiber->name);
+        ents[nents].mode = S_IFREG | S_IRUGO;
+        ents[nents].iop = NULL;
+        ents[nents].fop = &fiber_ops;
+
+        nents++;
+    }
+    
+    ret_val = origin_proc_pident_lookup(dir, dentry, ents, nents);
+
+    kfree(ents);
+
+    return ret_val;
 }
 
 

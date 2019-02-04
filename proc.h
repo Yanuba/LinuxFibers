@@ -67,5 +67,5 @@ int fibers_readdir(struct file *, struct dir_context *);
 ssize_t fiber_read(struct file *, char __user *, size_t, loff_t *);
 ssize_t fiber_read_handler(struct file *, char __user *, size_t, loff_t *, struct module_hashtable*);
 struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags);
-
+struct dentry* fibers_lookup_handler(struct inode *dir, struct dentry *dentry, unsigned int flags, struct module_hashtable*);
 #endif /* !_PROC_H */
