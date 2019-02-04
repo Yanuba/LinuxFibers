@@ -1,6 +1,3 @@
-/*
- * How to deal with errno? 
- * */ 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,8 +5,6 @@
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
 #include <strings.h>
-#include <errno.h>
-
 
 #include "Fibers.h"
 #include "Fibers_ioctls.h"
@@ -24,7 +19,6 @@ static bool _DESCRIPTOR_GUARD = false;
 void *ConvertThreadToFiber() 
 {    
     fiber_t *id;
-    int ret;
 
     id = (fiber_t *) malloc(sizeof(fiber_t)); 
 
@@ -69,11 +63,10 @@ void *ConvertThreadToFiber()
     return id;
 }
 
-/*
- * Creates a new Fiber context
- * In case if success an identifier for the new fiber is returned.
- * In case of failure a non vaild fiber identifier is returend, all calls on it will fail.
- * */
+
+/**
+ * CreateFiber - creates a new fiber
+ */
 void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args) 
 {
     struct fiber_args   arguments;
@@ -115,10 +108,10 @@ void *CreateFiber(size_t stack_size, void (*routine)(void *), void *args)
     return id;
 }
 
-/*
- * Switches the execution context to a different Fiber.
+/**
+ * SwitchToFiber - Switches the execution context to a different Fiber.
  * It can fail if switching to a Fiber which is already active
- * */
+ */
 bool SwitchToFiber(void* fiber) 
 {
     if(ioctl(_FIBER_DESCRIPTOR, IOCTL_SWITCH, fiber))
@@ -126,10 +119,10 @@ bool SwitchToFiber(void* fiber)
     return true;
 }
 
-/*
- * Allocates a FLS Index.
+/**
+ * FlsAlloc - Allocates a FLS Index.
  * In case of error, returns -1, which is not valid index
- * */
+ */
 long FlsAlloc(void) 
 {
     long index;
@@ -139,10 +132,9 @@ long FlsAlloc(void)
     return index;
 }
 
-/*
- *  Free an FLS Index
- *  Return false in case of error 
- * */
+/**
+ * FlsFree - Free an FLS Index
+ */
 bool FlsFree(long index) {
 
     if (ioctl(_FIBER_DESCRIPTOR, IOCTL_FREE, &index))
@@ -150,10 +142,9 @@ bool FlsFree(long index) {
     return true;
 }
 
-/*
- *  GetValue associated to FLS Index
- *  returns -1 in case of error
- * */
+/**
+ *  FlsGetValue - GetValue associated to FLS Index
+ */
 long long FlsGetValue(long index){
 
     struct fls_args args;
@@ -165,9 +156,9 @@ long long FlsGetValue(long index){
     return args.value;
 }
 
-/*
- *@TO_DO
- * */
+/**
+ * FlsSetValue - Set a value of an allocated FLS index
+ */
 bool FlsSetValue(long index, long long value){
     struct fls_args args;
     args.index = index;
