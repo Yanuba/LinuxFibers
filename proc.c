@@ -23,9 +23,9 @@ struct inode_operations iops = {
     .lookup = fibers_lookup, //this should rely on proc_pident_lookup()
 }; //lookup tells we have other inode to see, what we should do here?
 
-struct file_operations fiber_ops{
-    .read = 
-}
+struct file_operations fiber_ops = {
+    .read = NULL,
+};
 
 struct pid_entry fiber_folder = DIR("fibers", S_IRUGO|S_IXUGO, iops, fops);
 
