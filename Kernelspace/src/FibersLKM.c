@@ -8,17 +8,15 @@
 #include "Fibers_kioctls.h"
 #include "proc.h"
 
-struct module_hashtable process_table;
+static struct module_hashtable process_table;
+
+/**
+ * Modules stuff
+ */
 
 static int fibers_open(struct inode*, struct file*);
 static int fibers_release(struct inode*, struct file*);
 static long fibers_ioctl(struct file *, unsigned int, unsigned long);
-
-int kprobe_cleanup_handler(struct kprobe *, struct pt_regs *);
-
-//proc
-int kprobe_proc_lookup_handler(struct kprobe*, struct pt_regs *);
-int kprobe_proc_readdir_handler(struct kprobe*, struct pt_regs *);
 
 static int dev_major;
 static struct class *device_class = NULL;
@@ -32,21 +30,39 @@ static struct file_operations fops = {
     .compat_ioctl = fibers_ioctl,
     };
 
+/**
+ * Kprobes stuff
+ */
+
+static int kprobe_cleanup_handler(struct kprobe *, struct pt_regs *);
+static int kprobe_proc_lookup_handler(struct kretprobe_instance*, struct pt_regs *);
+static int kprobe_proc_readdir_handler(struct kretprobe_instance*, struct pt_regs *);
+
+
 static struct kprobe probe = {
     .pre_handler = kprobe_cleanup_handler,
     .symbol_name = "do_exit"
 };
 
-//proc
-static struct kprobe readdir_probe = {
-    .pre_handler = kprobe_proc_readdir_handler,
-    .symbol_name = "proc_pident_readdir"
+
+
+static struct kretprobe readdir_probe = {
+    .kp = {.symbol_name = "proc_pident_readdir"},
+    .handler = kprobe_proc_post_readdir_handler, //add post handler
+    .entry_handler = kprobe_proc_readdir_handler,
+    .data_size = sizeof(struct kret_data),
 };
 
-static struct kprobe lookup_probe = {
-    .pre_handler = kprobe_proc_lookup_handler,
-    .symbol_name = "proc_pident_lookup"
+static struct kretprobe lookup_probe = {
+    .kp = {.symbol_name = "proc_pident_lookup"},
+    .handler = kprobe_proc_post_lookup_handler, //add post handler
+    .entry_handler = kprobe_proc_lookup_handler,
+    .data_size = sizeof(struct kret_data),
 };
+
+/**
+ * Module functions
+ */
 
 static int fibers_open(struct inode* i_node, struct file* filp) {
     struct process_active *process;
@@ -94,6 +110,20 @@ static int fibers_release(struct inode* i_node, struct file* filp) {
     return 0;
 }
 
+/*
+IOCTL ERRORS
+       EBADF  fd is not a valid file descriptor.
+
+       EFAULT argp references an inaccessible memory area.
+
+       EINVAL request or argp is not valid.
+
+       ENOTTY fd is not associated with a character special device.
+
+       ENOTTY The specified request does not apply to the kind of object  that
+              the file descriptor fd references.
+*/
+
 static long fibers_ioctl(struct file * filp, unsigned int cmd, unsigned long arg)
 {   
     struct task_struct *caller;
@@ -140,26 +170,12 @@ int kprobe_cleanup_handler(struct kprobe *p, struct pt_regs *regs) {
     return _cleanup(&process_table);
 }
 
-//proc
-
-int kprobe_proc_lookup_handler(struct kprobe *p, struct pt_regs *regs) {
-    return _lookup_handler(&process_table, regs);
+int kprobe_proc_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
+    return _lookup_handler(&process_table, p, regs);
 }
 
-int kprobe_proc_readdir_handler(struct kprobe *p, struct pt_regs *regs) {
-    return _readdir_handler(&process_table, regs);
-}
-
-
-//Copyed from tty driver
-static char *fiber_devnode(struct device *dev, umode_t *mode)
-{
-    if (!mode)
-            return NULL;
-    if (dev->devt == MKDEV(dev_major, 0) ||
-        dev->devt == MKDEV(dev_major, 2))
-            *mode = 0666;
-    return NULL;
+int kprobe_proc_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
+    return _readdir_handler(&process_table, p, regs);
 }
 
 int fibers_readdir(struct file *file, struct dir_context *ctx){
@@ -172,6 +188,14 @@ ssize_t fiber_read(struct file * file, char __user * buff, size_t count, loff_t 
 
 struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags){
     return fibers_lookup_handler(dir, dentry, flags, &process_table);
+}
+
+static char *fiber_devnode(struct device *dev, umode_t *mode)
+{
+    if (!mode)
+            return NULL;
+    *mode = 0666;
+    return NULL;
 }
 
 static int __init fibers_init(void) 
@@ -212,11 +236,11 @@ static int __init fibers_init(void)
     if (ret)
         goto fail_devcreate; //fail chain
 
-    ret = register_kprobe(&lookup_probe);
+    ret = register_kretprobe(&lookup_probe);
     if (ret)
         goto fail_lookup_register;
     
-    ret = register_kprobe(&readdir_probe);
+    ret = register_kretprobe(&readdir_probe);
     if (ret)
         goto fail_readdir_register;
 
@@ -226,7 +250,7 @@ static int __init fibers_init(void)
     return 0;
 
     fail_readdir_register:
-        unregister_kprobe(&lookup_probe);
+        unregister_kretprobe(&lookup_probe);
     fail_lookup_register:
         unregister_kprobe(&probe);
     fail_devcreate:
@@ -242,8 +266,8 @@ static int __init fibers_init(void)
 static void __exit fibers_exit(void)
 {   
     unregister_kprobe(&probe);
-    unregister_kprobe(&lookup_probe);
-    unregister_kprobe(&readdir_probe);
+    unregister_kretprobe(&lookup_probe);
+    unregister_kretprobe(&readdir_probe);
     device_destroy(device_class, MKDEV(dev_major,0));
     class_unregister(device_class);
     class_destroy(device_class);

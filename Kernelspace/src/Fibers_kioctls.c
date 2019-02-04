@@ -8,6 +8,19 @@
 #include "Fibers_ioctls.h"
 #include "Fibers_kioctls.h"
 
+inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
+{
+    struct process_active   *ret;
+    struct hlist_node       *n;
+    hash_for_each_possible_safe(hashtable->htable, ret, n, next, tgid)
+    {
+        if (ret->tgid == tgid)
+            return ret;
+            
+    }
+    return NULL;
+}
+
 static inline struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_struct *p, void (*entry_point)(void*), void* args, void* stack_base) 
 {
         struct fiber_struct* fiber;
@@ -45,21 +58,6 @@ static inline struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_st
         snprintf(fiber->name, 12, "%d", fiber_id);
         return fiber;
 }
-
-/*
-IOCTL
-ERRORS
-       EBADF  fd is not a valid file descriptor.
-
-       EFAULT argp references an inaccessible memory area.
-
-       EINVAL request or argp is not valid.
-
-       ENOTTY fd is not associated with a character special device.
-
-       ENOTTY The specified request does not apply to the kind of object  that
-              the file descriptor fd references.
-*/
 
 long _ioctl_convert(struct process_active *process, fiber_t* arg)
 {    
@@ -483,20 +481,6 @@ long _ioctl_set(struct process_active   *process, struct fls_args* args)
         //spin_unlock_irqrestore(&storage->fls_lock, flags);
         return -ENOTTY;
     }
-}
-
-
-static inline struct process_active* find_process(struct module_hashtable *hashtable, pid_t tgid)
-{
-    struct process_active   *ret;
-    struct hlist_node       *n;
-    hash_for_each_possible_safe(hashtable->htable, ret, n, next, tgid)
-    {
-        if (ret->tgid == tgid)
-            return ret;
-            
-    }
-    return NULL;
 }
 
 int _cleanup(struct module_hashtable *hashtable) {
