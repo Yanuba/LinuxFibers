@@ -215,7 +215,7 @@ ssize_t fiber_read_handler(struct file* file, char __user* buff, size_t count, l
                                     "Parent thread: %d\n"
                                     "Number of activations: %d\n"
                                     "Number of failed activations: %d\n"
-                                    "Total execution time: %llu ns\n", 
+                                    "Total execution time: %llu ms\n", 
                                     ((fiber->status == 0) ? "WAITING" : "RUNNING"),
                                     (unsigned long) fiber->entry_point,
                                     fiber->parent_thread, fiber->activations,

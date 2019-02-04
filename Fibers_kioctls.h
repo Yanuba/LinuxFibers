@@ -12,7 +12,7 @@
 
 #define MAX_FLS_INDEX 1024 //Up to 8Kb for fiber
 
-#define get_cpu_time() ((current->utime)+(current->stime))
+#define get_cpu_time() (((current->utime)+(current->stime))/1000000) //ms
 
 /* 
  * Hash table, each bucket should refer to a process, we anyway check the pid in case of conflicts (but this barely happens)
