@@ -161,6 +161,10 @@ static char *fiber_devnode(struct device *dev, umode_t *mode)
     return NULL;
 }
 
+int fibers_readdir(struct file *file, struct dir_context *ctx){
+    return fibers_readdir_handler(file, ctx, &process_table);
+}
+
 static int __init fibers_init(void) 
 {   
     int ret;

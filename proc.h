@@ -60,6 +60,7 @@ void _set_proc_dirent_readdir_from_kprobes(struct kprobe*);
 
 int _lookup_handler(struct module_hashtable*, struct pt_regs*);
 int _readdir_handler(struct module_hashtable*, struct pt_regs*);
+int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct module_hashtable* process_table);
 
 int fibers_readdir(struct file *, struct dir_context *);
 struct dentry* fibers_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags);

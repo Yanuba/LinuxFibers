@@ -64,6 +64,7 @@ struct fiber_struct
     struct fpu fpu_regs;    //FPU state
 
     /* Fields to be exposed in proc */
+    char[12]            name;
     short               status;                 //The fiber is running or not?
     void                (*entry_point)(void*);  //entry point of the fiber (EIP)
     pid_t               parent_process;         //key in the hash table

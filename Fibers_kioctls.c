@@ -42,7 +42,7 @@ static inline struct fiber_struct* allocate_fiber(pid_t fiber_id, struct task_st
         fiber->fls.size = -1;
         fiber->fls.fls = NULL;
         fiber->fls.used_index = NULL;
-
+        snprintf(fiber->name, 12, "%d", fiber_id);
         return fiber;
 }
 
