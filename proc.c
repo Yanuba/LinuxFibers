@@ -243,14 +243,14 @@ struct dentry* fibers_lookup_handler(struct inode *dir, struct dentry *dentry, u
     struct dentry* ret_val;
 
     if (kstrtoul(dentry->d_parent->d_name.name, 10, &folder_pid)) 
-        return 0;
+        return NULL;
     
     //may use a lock
     process = find_process(process_table, folder_pid);
 
     if (!process)
     {
-        return 0;
+        return NULL;
     }
 
     next = process->next_fid;
