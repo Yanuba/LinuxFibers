@@ -76,7 +76,7 @@ int _lookup_handler(struct module_hashtable* process_table, struct pt_regs* regs
     memcpy(new_ents, ents, sizeof(struct pid_entry)*nents);
     memcpy(&new_ents[nents], &fiber_folder, sizeof(struct pid_entry));
 
-    regs->dx = new_ents;
+    regs->dx = (unsigned long) new_ents;
     regs->cx = nents+1;
 
     //printk(KERN_NOTICE KBUILD_MODNAME " : _lookup_handler function activated.\n");
@@ -116,7 +116,7 @@ int _readdir_handler(struct module_hashtable* process_table, struct pt_regs* reg
     memcpy(new_ents, ents, sizeof(struct pid_entry)*nents);
     memcpy(&new_ents[nents], &fiber_folder, sizeof(struct pid_entry));
 
-    regs->dx = new_ents;
+    regs->dx = (unsigned long) new_ents;
     regs->cx = nents+1;
 
     //printk(KERN_NOTICE KBUILD_MODNAME " : _readdir_handler function terminated.\n");
