@@ -4,6 +4,23 @@
 static proc_pident_lookup_t origin_proc_pident_lookup;
 static proc_pident_readdir_t origin_proc_pident_readdir;
 
+//copyed from proc/base.h
+struct file_operations fops = {
+    .read = generic_read_dir,
+    .iterate_shared = fibers_readdir,
+    .llseek = generic_file_llseek,
+};
+
+struct inode_operations iops = {
+    .lookup = fibers_lookup,
+};
+
+struct file_operations fiber_ops = {
+    .read = fiber_read,
+};
+
+struct pid_entry fiber_folder = DIR("fibers", S_IRUGO | S_IXUGO, iops, fops);
+
 void _set_proc_dirent_lookup_from_kprobes(struct kretprobe *kpr)
 {
     origin_proc_pident_lookup = (void *)kpr->kp.addr;
@@ -14,42 +31,9 @@ void _set_proc_dirent_readdir_from_kprobes(struct kretprobe *kpr)
     origin_proc_pident_readdir = (void *)kpr->kp.addr;
 }
 
-//copyed from proc/base.h
-struct file_operations fops = {
-    .read = generic_read_dir,
-    .iterate_shared = fibers_readdir,
-    .llseek = generic_file_llseek,
-};
-
-struct inode_operations iops = {
-    .lookup = fibers_lookup,
-};                           
-
-struct file_operations fiber_ops = {
-    .read = fiber_read,
-};
-
-struct pid_entry fiber_folder = DIR("fibers", S_IRUGO | S_IXUGO, iops, fops);
-
-//this is already defined somewhere else
-/*
-static inline struct process_active *find_process(struct module_hashtable *hashtable, pid_t tgid)
-{
-    struct process_active *ret;
-    struct hlist_node *n;
-    hash_for_each_possible_safe(hashtable->htable, ret, n, next, tgid)
-    {
-        if (ret->tgid == tgid)
-            return ret;
-    }
-
-    return NULL;
-}
-*/
 //apparently does nothing
 int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_instance *p, struct pt_regs *regs)
 {
-
     struct inode *dir;
     struct dentry *dentry;
     struct pid_entry *ents;
@@ -57,11 +41,11 @@ int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_ins
 
     unsigned long folder_pid;
     struct process_active *process;
-    
+
     //struct pid_entry *new_ents;
     struct kret_data *pdata;
-    
-    pdata = (struct kret_data *) p->data;
+
+    pdata = (struct kret_data *)p->data;
     pdata->ents = NULL;
 
     dir = (struct inode *)regs->di;
@@ -78,30 +62,25 @@ int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_ins
         return 0;
 
     pdata->ents = kmalloc(sizeof(struct pid_entry) * (nents + 1), GFP_KERNEL);
-    //printk(KERN_NOTICE KBUILD_MODNAME " : pid; %ld process: %d\n", folder_pid, process->tgid);
     memcpy(pdata->ents, ents, sizeof(struct pid_entry) * nents);
     memcpy(&pdata->ents[nents], &fiber_folder, sizeof(struct pid_entry));
 
     regs->dx = (unsigned long)pdata->ents;
     regs->cx = nents + 1;
 
-    //((struct kret_data *) p->data)->ents = new_ents;
-    //printk(KERN_NOTICE KBUILD_MODNAME " : _lookup_handler function activated.\n");
-
     return 0;
 }
 
 //add retprobe
-int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
-    
+int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs)
+{
+
     struct kret_data *pdata;
-    pdata = (struct kret_data *) p->data;
+    pdata = (struct kret_data *)p->data;
     if (pdata->ents)
         kfree(pdata->ents);
     return 0;
 }
-
-
 
 //readdir is used to read directories (OBV)
 int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_instance *p, struct pt_regs *regs) //params in di, si, dx, cx
@@ -112,11 +91,10 @@ int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_in
     unsigned int nents;
     unsigned long folder_pid;
     struct process_active *process;
-    //struct pid_entry *new_ents;
 
     struct kret_data *pdata;
-    
-    pdata = (struct kret_data *) p->data;
+
+    pdata = (struct kret_data *)p->data;
     pdata->ents = NULL;
 
     file = (struct file *)regs->di;
@@ -130,29 +108,23 @@ int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_in
     process = find_process(process_table, folder_pid);
 
     if (!process)
-    {
-        //printk(KERN_NOTICE KBUILD_MODNAME " : Stamo naa folder sbajata porcammerda.\n");
         return 0;
-    }
 
     pdata->ents = kmalloc(sizeof(struct pid_entry) * (nents + 1), GFP_KERNEL);
-    //printk(KERN_NOTICE KBUILD_MODNAME " : pid; %ld process: %d\n", folder_pid, process->tgid);
     memcpy(pdata->ents, ents, sizeof(struct pid_entry) * nents);
     memcpy(&pdata->ents[nents], &fiber_folder, sizeof(struct pid_entry));
 
     regs->dx = (unsigned long)pdata->ents;
     regs->cx = nents + 1;
-    
-    //((struct kret_data *) p->data)->ents = new_ents;
 
-    //printk(KERN_NOTICE KBUILD_MODNAME " : _readdir_handler function terminated.\n");
     return 0;
 }
 
 //add retprobe
-int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
+int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs)
+{
     struct kret_data *pdata;
-    pdata = (struct kret_data *) p->data;
+    pdata = (struct kret_data *)p->data;
     if (pdata->ents)
         kfree(pdata->ents);
     return 0;
@@ -176,9 +148,7 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
     process = find_process(process_table, folder_pid);
 
     if (!process)
-    {
         return 0;
-    }
 
     next = process->next_fid;
 
@@ -232,9 +202,7 @@ ssize_t fiber_read_handler(struct file *file, char __user *buff, size_t count, l
     process = find_process(process_table, pid);
 
     if (!process)
-    {
         return 0;
-    }
 
     hlist_for_each_entry(fiber, &process->running_fibers, next)
     {
@@ -292,9 +260,7 @@ struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, u
     process = find_process(process_table, folder_pid);
 
     if (!process)
-    {
         return NULL;
-    }
 
     next = process->next_fid;
 
