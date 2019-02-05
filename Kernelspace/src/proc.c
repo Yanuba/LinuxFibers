@@ -31,7 +31,6 @@ void _set_proc_dirent_readdir_from_kprobes(struct kretprobe *kpr)
     origin_proc_pident_readdir = (void *)kpr->kp.addr;
 }
 
-//apparently does nothing
 int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_instance *p, struct pt_regs *regs)
 {
     struct inode *dir;
@@ -42,7 +41,6 @@ int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_ins
     unsigned long folder_pid;
     struct process_active *process;
     
-    //struct pid_entry *new_ents;
     struct kret_data *pdata;
     
     pdata = (struct kret_data *) p->data;
@@ -71,7 +69,6 @@ int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_ins
     return 0;
 }
 
-//add retprobe
 int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
     
     struct kret_data *pdata;
@@ -119,7 +116,6 @@ int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_in
     return 0;
 }
 
-//add retprobe
 int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
     struct kret_data *pdata;
     pdata = (struct kret_data *) p->data;
@@ -256,7 +252,6 @@ struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, u
     if (kstrtoul(dentry->d_parent->d_name.name, 10, &folder_pid))
         return NULL;
 
-    //may use a lock
     process = find_process(process_table, folder_pid);
 
     if (!process)
