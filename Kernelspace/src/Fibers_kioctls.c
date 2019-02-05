@@ -281,7 +281,6 @@ long _ioctl_alloc(struct process_active *process, long *arg)
     }
     else
         return -ENOTTY;
-
 }
 
 long _ioctl_free(struct process_active *process, long *arg)
@@ -378,7 +377,6 @@ long _ioctl_get(struct process_active *process, struct fls_args *args)
     }
     else
         return -ENOTTY;
-
 }
 
 long _ioctl_set(struct process_active *process, struct fls_args *args)
@@ -426,7 +424,6 @@ long _ioctl_set(struct process_active *process, struct fls_args *args)
     }
     else
         return -ENOTTY;
-
 }
 
 int _cleanup(struct module_hashtable *hashtable)

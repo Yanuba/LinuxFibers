@@ -9,16 +9,16 @@ typedef pid_t fiber_t;
 
 struct fiber_args
 {
-    void* stack_address;
+    void *stack_address;
     void (*routine)(void *);
-    void* routine_args;
+    void *routine_args;
     fiber_t ret;
 };
 
 struct fls_args
 {
-    unsigned long   index;
-    long long       value;        
+    unsigned long index;
+    long long value;
 };
 
 //IOR return data to userland, IOW read data from userland
@@ -27,9 +27,9 @@ struct fls_args
 #define IOCTL_SWITCH _IOWR(IOCTL_MAGIC_NUM, 2, fiber_t)
 
 //FLS IOCTL
-#define IOCTL_ALLOC _IOR (IOCTL_MAGIC_NUM, 3, long)
-#define IOCTL_FREE  _IOW (IOCTL_MAGIC_NUM, 4, long)
-#define IOCTL_GET   _IOWR(IOCTL_MAGIC_NUM, 5, struct fls_args)
-#define IOCTL_SET   _IOW (IOCTL_MAGIC_NUM, 6, struct fls_args) 
+#define IOCTL_ALLOC _IOR(IOCTL_MAGIC_NUM, 3, long)
+#define IOCTL_FREE _IOW(IOCTL_MAGIC_NUM, 4, long)
+#define IOCTL_GET _IOWR(IOCTL_MAGIC_NUM, 5, struct fls_args)
+#define IOCTL_SET _IOW(IOCTL_MAGIC_NUM, 6, struct fls_args)
 
 #endif /* !FIOCTLS_H */

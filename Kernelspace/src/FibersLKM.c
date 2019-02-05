@@ -92,14 +92,14 @@ static int fibers_open(struct inode *i_node, struct file *filp)
     INIT_HLIST_HEAD(&process->running_fibers);
     INIT_HLIST_HEAD(&process->waiting_fibers);
     INIT_HLIST_NODE(&process->next);
-    
+
     spin_lock_init(&(process->lock));
 
     filp->private_data = process;
     hash_add(process_table.htable, &process->next, tgid);
 
     spin_unlock_irqrestore(&process_table.lock, flags);
-    
+
     return 0;
 }
 
@@ -168,9 +168,9 @@ static int __init fibers_init(void)
         ret = PTR_ERR(device_class);
         goto fail_classcreate;
     }
-    
+
     //set permission on device file
-    device_class->devnode = fiber_devnode; 
+    device_class->devnode = fiber_devnode;
 
     //create device
     device = device_create(device_class, NULL, MKDEV(dev_major, 0), NULL, KBUILD_MODNAME);

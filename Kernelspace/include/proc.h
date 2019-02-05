@@ -40,11 +40,12 @@ struct pid_entry
 
 /**/
 
-int kprobe_proc_post_lookup_handler(struct kretprobe_instance*, struct pt_regs *);
-int kprobe_proc_post_readdir_handler(struct kretprobe_instance*, struct pt_regs *);
+int kprobe_proc_post_lookup_handler(struct kretprobe_instance *, struct pt_regs *);
+int kprobe_proc_post_readdir_handler(struct kretprobe_instance *, struct pt_regs *);
 
-struct kret_data {
-    struct pid_entry* ents;
+struct kret_data
+{
+  struct pid_entry *ents;
 };
 
 typedef struct dentry *(*proc_pident_lookup_t)(struct inode *, struct dentry *, const struct pid_entry *, unsigned int);

@@ -16,12 +16,12 @@ struct module_hashtable
 
 struct process_active
 {
-    spinlock_t lock;                  
-    pid_t tgid;                       
+    spinlock_t lock;
+    pid_t tgid;
     pid_t next_fid;                   //will be next fber id
     struct hlist_head running_fibers; //running fibersof
     struct hlist_head waiting_fibers; //waiting fibersof
-    struct hlist_node next;           //other process 
+    struct hlist_node next;           //other process
 };
 
 struct fls_struct
