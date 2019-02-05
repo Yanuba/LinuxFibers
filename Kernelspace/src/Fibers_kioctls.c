@@ -231,11 +231,9 @@ long _ioctl_alloc(struct process_active *process, long *arg)
     struct fiber_struct *fiber;
     struct fls_struct *storage;
 
-    unsigned long index;
-    unsigned long flags;
+    unsigned long index, flags;
 
-    pid_t tgid;
-    pid_t pid;
+    pid_t tgid, pid;
 
     tgid = task_tgid_nr(current);
     pid = task_pid_nr(current);
