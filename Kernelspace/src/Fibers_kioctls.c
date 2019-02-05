@@ -194,14 +194,15 @@ long _ioctl_switch(struct process_active *process, fiber_t *usr_id_next)
             switch_prev = cursor;
             //do context switch
 
+            //no one can access the fibers during the switch
+            hlist_del(&(switch_next->next));
+            hlist_del(&(switch_prev->next));
+            
             //preempt_disable();
             copy_fxregs_to_kernel(&(switch_prev->fpu_regs)); //save FPU state
             (void)memcpy(&(switch_prev->regs), task_pt_regs(current), sizeof(struct pt_regs));
             (void)memcpy(task_pt_regs(current), &(switch_next->regs), sizeof(struct pt_regs));
             copy_kernel_to_fxregs(&(switch_next->fpu_regs.state.fxsave)); //restore FPU state
-
-            hlist_del(&(switch_next->next));
-            hlist_del(&(switch_prev->next));
 
             switch_next->activations += 1;
             switch_next->thread_on = pid;
