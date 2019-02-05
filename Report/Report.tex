@@ -72,7 +72,7 @@ According to the parameter passed to the \texttt{ioclt} function, we check if th
 \end{itemize}
 
 \subsection{FLS}
-
+The Fiber Local Storage is implemented as an array of \textit{long} \textit{long} along with a bitmask. The value 1 in the position n of the mask means that the index is available for usage, 0 means the opposite. The size of such array is 1024 bytes for each Fiber.
 \subsection{Cleanup}
 \subsection{proc}
 
