@@ -25,7 +25,6 @@ static inline struct fiber_struct *allocate_fiber(pid_t fiber_id, struct task_st
     fiber = kzalloc(sizeof(struct fiber_struct), GFP_KERNEL);
     fiber->fiber_id = fiber_id;
     fiber->thread_on = fiber->parent_thread = task_pid_nr(p);
-    fiber->parent_process = task_tgid_nr(p);
     fiber->activations = 1;
     fiber->failed_activations = 0;
     fiber->status = FIBER_RUNNING;

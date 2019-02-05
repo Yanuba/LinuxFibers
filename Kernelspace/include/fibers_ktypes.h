@@ -45,7 +45,6 @@ struct fiber_struct
     char name[12];
     short status;                      //The fiber is running or not?
     void (*entry_point)(void *);       //entry point of the fiber (EIP)
-    pid_t parent_process;              //key in the hash table
     pid_t parent_thread;               //pid of the thread that created the fiber
     int activations;                   //the number of current activations of the Fiber
     int failed_activations;            //the number of failed activations
