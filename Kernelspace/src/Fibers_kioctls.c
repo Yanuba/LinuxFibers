@@ -152,7 +152,7 @@ long _ioctl_create(struct process_active *process, struct fiber_args *args)
 
 long _ioctl_switch(struct process_active *process, fiber_t *usr_id_next)
 {
-    struct fiber_struct *switch_prev, *switch_next, cursor;
+    struct fiber_struct *switch_prev, *switch_next, *cursor;
 
     unsigned long flags;
 
