@@ -9,8 +9,8 @@ SRC = 	src/calqueue.c \
 		
 CFLAGS = -O3 -I../Userspace/include -I../Kernelspace/include
 EXEC = test
-OBJS := $(SRC:%.c=%.o)
-OBJS := $(OBJS:%.S=%.o) ../Userspace/Fibers.o
+OBJS := $(SRC:%.c=%.o) ../Userspace/Fibers.o
+OBJS := $(OBJS:%.S=%.o)
 LIBS = -lm -lpthread 
 
 all: $(EXEC)
