@@ -1,5 +1,5 @@
-#include "proc.h"
 #include <linux/slab.h>
+#include "proc.h"
 
 static proc_pident_lookup_t origin_proc_pident_lookup;
 static proc_pident_readdir_t origin_proc_pident_readdir;
@@ -13,7 +13,7 @@ struct file_operations fops = {
 
 struct inode_operations iops = {
     .lookup = fibers_lookup,
-};
+};                           
 
 struct file_operations fiber_ops = {
     .read = fiber_read,
@@ -41,11 +41,11 @@ int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_ins
 
     unsigned long folder_pid;
     struct process_active *process;
-
+    
     //struct pid_entry *new_ents;
     struct kret_data *pdata;
-
-    pdata = (struct kret_data *)p->data;
+    
+    pdata = (struct kret_data *) p->data;
     pdata->ents = NULL;
 
     dir = (struct inode *)regs->di;
@@ -72,11 +72,10 @@ int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_ins
 }
 
 //add retprobe
-int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs)
-{
-
+int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
+    
     struct kret_data *pdata;
-    pdata = (struct kret_data *)p->data;
+    pdata = (struct kret_data *) p->data;
     if (pdata->ents)
         kfree(pdata->ents);
     return 0;
@@ -93,8 +92,8 @@ int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_in
     struct process_active *process;
 
     struct kret_data *pdata;
-
-    pdata = (struct kret_data *)p->data;
+    
+    pdata = (struct kret_data *) p->data;
     pdata->ents = NULL;
 
     file = (struct file *)regs->di;
@@ -116,15 +115,14 @@ int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_in
 
     regs->dx = (unsigned long)pdata->ents;
     regs->cx = nents + 1;
-
+    
     return 0;
 }
 
 //add retprobe
-int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs)
-{
+int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
     struct kret_data *pdata;
-    pdata = (struct kret_data *)p->data;
+    pdata = (struct kret_data *) p->data;
     if (pdata->ents)
         kfree(pdata->ents);
     return 0;
@@ -149,6 +147,7 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
 
     if (!process)
         return 0;
+
 
     next = process->next_fid;
 
@@ -203,6 +202,7 @@ ssize_t fiber_read_handler(struct file *file, char __user *buff, size_t count, l
 
     if (!process)
         return 0;
+
 
     hlist_for_each_entry(fiber, &process->running_fibers, next)
     {

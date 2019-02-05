@@ -1,8 +1,6 @@
 #include <linux/slab.h>
-//for pt_regs
 #include <linux/ptrace.h>
 #include <linux/sched/task_stack.h>
-//for fpu
 #include <asm/fpu/internal.h>
 
 #include "Fibers_ioctls.h"
