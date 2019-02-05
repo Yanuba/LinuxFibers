@@ -7,7 +7,7 @@ SRC = 	src/calqueue.c \
 		src/thread.c \
 		src/ult.c
 		
-CFLAGS = -O3 -I../Userspace/include -I../Kernelspace/include
+CFLAGS = -O3 -I../Userspace/include
 EXEC = test
 OBJS := $(SRC:%.c=%.o)
 OBJS := $(OBJS:%.S=%.o) ../Userspace/Fibers.o
