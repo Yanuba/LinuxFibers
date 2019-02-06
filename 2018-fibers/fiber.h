@@ -1,6 +1,7 @@
 #pragma once
 
 #define KERNEL
+//#define USERSPACE
 
 #ifdef USERSPACE
 
