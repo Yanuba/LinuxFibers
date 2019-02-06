@@ -197,8 +197,7 @@ static int __init fibers_init(void)
     if (ret)
         goto fail_readdir_register;
 
-    _set_proc_dirent_lookup_from_kprobes(&lookup_probe);
-    _set_proc_dirent_readdir_from_kprobes(&readdir_probe);
+    _set_functions_from_proc();
 
     return 0;
 

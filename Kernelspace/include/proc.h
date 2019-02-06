@@ -51,8 +51,7 @@ struct kret_data
 typedef struct dentry *(*proc_pident_lookup_t)(struct inode *, struct dentry *, const struct pid_entry *, unsigned int);
 typedef int (*proc_pident_readdir_t)(struct file *, struct dir_context *, const struct pid_entry *, unsigned int);
 
-void _set_proc_dirent_lookup_from_kprobes(struct kretprobe *);
-void _set_proc_dirent_readdir_from_kprobes(struct kretprobe *);
+void _set_functions_from_proc(void);
 
 int _lookup_handler(struct module_hashtable *, struct kretprobe_instance *p, struct pt_regs *);
 int _readdir_handler(struct module_hashtable *, struct kretprobe_instance *p, struct pt_regs *);

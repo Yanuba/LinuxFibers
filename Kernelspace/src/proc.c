@@ -1,11 +1,16 @@
 #include <linux/slab.h>
+#include <linux/kallsyms.h>
+
 #include "proc.h"
+//remove dead code
+//locks
 
 static proc_pident_lookup_t origin_proc_pident_lookup;
 static proc_pident_readdir_t origin_proc_pident_readdir;
 
 //copyed from proc/base.h
 struct file_operations fops = {
+    .owner = THIS_MODULE,
     .read = generic_read_dir,
     .iterate_shared = fibers_readdir,
     .llseek = generic_file_llseek,
@@ -13,22 +18,20 @@ struct file_operations fops = {
 
 struct inode_operations iops = {
     .lookup = fibers_lookup,
+    //missing getattr e setattr
 };                           
 
 struct file_operations fiber_ops = {
+    .owner = THIS_MODULE,
     .read = fiber_read,
 };
 
 struct pid_entry fiber_folder = DIR("fibers", S_IRUGO | S_IXUGO, iops, fops);
 
-void _set_proc_dirent_lookup_from_kprobes(struct kretprobe *kpr)
+void _set_functions_from_proc() 
 {
-    origin_proc_pident_lookup = (void *)kpr->kp.addr;
-}
-
-void _set_proc_dirent_readdir_from_kprobes(struct kretprobe *kpr)
-{
-    origin_proc_pident_readdir = (void *)kpr->kp.addr;
+    origin_proc_pident_lookup = kallsyms_lookup_name("proc_pident_lookup");
+    origin_proc_pident_readdir = kallsyms_lookup_name("proc_pident_readdir");
 }
 
 int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_instance *p, struct pt_regs *regs)
