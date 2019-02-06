@@ -81,9 +81,10 @@ The Fiber Local Storage is implemented as an array of \textit{long} \textit{long
 
 \subsection{Cleanup}
 The cleanup is managed by registering a kprobe on the \texttt{do\_exit()} function. We scan the hashtable to find the process which the thread that exited belongs to. Then, we scan the running queue to look for the Fiber running on the top of the current thread, we remove it from the queue and we free the memory. Consequently, we check if there are running Fibers left; if there are we exit from the function, otherwise it means that the whole process terminated and so we delete all the Fibers in the waiting queue.
+
 \subsection{proc}
-The exposition of Fibers information in the proc FS is done through the use usage of kretprobes.\\
-In order to show the \textit{fibers} folder inside the \textit{PID} folder in \textit{proc} we probe the functions \texttt{proc\_pident\_lookup} and \texttt{proc\_pident\_readdir}.
+Our approach in exposing Fibers information in the proc FS is done through the use usage of kretprobes.\\ %kek
+In order to show the \textit{fibers} folder inside the \textit{PID} folder in \textit{proc} we probe the functions \texttt{proc\_pident\_lookup} and \texttt{proc\_pident\_readdir}. We use a pre-handler in order to change the parameters that the functions take as input; we allocate a new array, copy the content of the original input in it and add the pid\_entry corresponding to the \textit{fibers} folder. Then, we call the original functions that will work on the new input. Finally, we employ a post-handler to release the memory used for the new input. We associate to the new pid\_entry a struct file\_operations for which we defined a function, fiber\_readdir, for the .iterated\_shared operation. The latter is the function that creates the files related to each Fiber of the process by scanning both the running and the waiting queues. We associate to the files a struct file\_operation to which .read operation we defined a function, fiber\_read, that writes all the information we are interested in about the Fiber, such as whether it is running or not, the initial entry point, the parent thread, the number of successful and failed activations and the total execution time. 
 
 
 \section{Benchmark}
