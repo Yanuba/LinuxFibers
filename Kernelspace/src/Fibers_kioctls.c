@@ -298,6 +298,12 @@ long _ioctl_free(struct process_active *process, long *arg)
     if (!process || process->tgid != tgid)
         return -ENOTTY;
 
+    if (copy_from_user((void *)&index, (void *)arg, sizeof(long)))
+        return -EFAULT;
+
+    if (index > MAX_FLS_INDEX)
+        return -ENOTTY;
+
     spin_lock_irqsave(&process->lock, flags);
     hlist_for_each_entry(fiber, &process->running_fibers, next)
     {
@@ -313,12 +319,6 @@ long _ioctl_free(struct process_active *process, long *arg)
         return -ENOTTY;
     }
     spin_unlock_irqrestore(&process->lock, flags);
-
-    if (copy_from_user((void *)&index, (void *)arg, sizeof(long)))
-        return -EFAULT;
-
-    if (index > MAX_FLS_INDEX)
-        return -ENOTTY;
 
     if (storage->fls == NULL || storage->used_index == NULL)
         return -ENOTTY;

@@ -178,6 +178,57 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
     return ret_val;
 }
 
+struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, unsigned int flags, struct module_hashtable *process_table)
+{
+    unsigned long folder_pid;
+    struct process_active *process;
+    struct pid_entry *ents;
+    struct fiber_struct *fiber;
+    unsigned int next;
+    unsigned int nents;
+    struct dentry *ret_val;
+
+    if (kstrtoul(dentry->d_parent->d_name.name, 10, &folder_pid))
+        return NULL;
+
+    process = find_process(process_table, folder_pid);
+
+    if (!process)
+        return NULL;
+
+    next = process->next_fid;
+
+    ents = kmalloc(sizeof(struct pid_entry) * next, GFP_KERNEL);
+    nents = 0;
+    hlist_for_each_entry(fiber, &process->running_fibers, next)
+    {
+        ents[nents].name = fiber->name;
+        ents[nents].len = strlen(fiber->name);
+        ents[nents].mode = S_IFREG | S_IRUGO;
+        ents[nents].iop = NULL;
+        ents[nents].fop = &fiber_ops;
+
+        nents++;
+    }
+
+    hlist_for_each_entry(fiber, &process->waiting_fibers, next)
+    {
+        ents[nents].name = fiber->name;
+        ents[nents].len = strlen(fiber->name);
+        ents[nents].mode = S_IFREG | S_IRUGO;
+        ents[nents].iop = NULL;
+        ents[nents].fop = &fiber_ops;
+
+        nents++;
+    }
+
+    ret_val = origin_proc_pident_lookup(dir, dentry, ents, nents);
+
+    kfree(ents);
+
+    return ret_val;
+}
+
 ssize_t fiber_read_handler(struct file *file, char __user *buff, size_t count, loff_t *f_pos, struct module_hashtable *process_table)
 {
 
@@ -237,55 +288,4 @@ PRINT:
 
     *f_pos += offset;
     return offset;
-}
-
-struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, unsigned int flags, struct module_hashtable *process_table)
-{
-    unsigned long folder_pid;
-    struct process_active *process;
-    struct pid_entry *ents;
-    struct fiber_struct *fiber;
-    unsigned int next;
-    unsigned int nents;
-    struct dentry *ret_val;
-
-    if (kstrtoul(dentry->d_parent->d_name.name, 10, &folder_pid))
-        return NULL;
-
-    process = find_process(process_table, folder_pid);
-
-    if (!process)
-        return NULL;
-
-    next = process->next_fid;
-
-    ents = kmalloc(sizeof(struct pid_entry) * next, GFP_KERNEL);
-    nents = 0;
-    hlist_for_each_entry(fiber, &process->running_fibers, next)
-    {
-        ents[nents].name = fiber->name;
-        ents[nents].len = strlen(fiber->name);
-        ents[nents].mode = S_IFREG | S_IRUGO;
-        ents[nents].iop = NULL;
-        ents[nents].fop = &fiber_ops;
-
-        nents++;
-    }
-
-    hlist_for_each_entry(fiber, &process->waiting_fibers, next)
-    {
-        ents[nents].name = fiber->name;
-        ents[nents].len = strlen(fiber->name);
-        ents[nents].mode = S_IFREG | S_IRUGO;
-        ents[nents].iop = NULL;
-        ents[nents].fop = &fiber_ops;
-
-        nents++;
-    }
-
-    ret_val = origin_proc_pident_lookup(dir, dentry, ents, nents);
-
-    kfree(ents);
-
-    return ret_val;
 }
