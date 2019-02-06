@@ -67,19 +67,24 @@ The \texttt{release} function does nothing since all the cleanup work is done us
 According to the parameter passed to the \texttt{ioclt} function, we check if the buffer passed as argument is accessible. Then, the corresponding IOCTL is called.
 \begin{itemize}
 \item IOCTL\_CONVERT: the function checks if we are already a Fiber; if true the convert fails, otherwise we allocate a new Fiber setting as entry point the current instruction pointer value.
-\item IOCTL\_CREATE: it checks if the caller is a Fibers; if false it fails, otherwise we allocate a new Fibers and add it to the queue related to the waiting Fibers the the process hashtable.ù
+\item IOCTL\_CREATE: it checks if the caller is a Fibers; if false it fails, otherwise we allocate a new Fibers and add it to the queue related to the waiting Fibers the the process hashtable. 
 \item IOCTL\_SWITCH: the function checks if the caller is a Fiber; if true we look for the Fiber we want to switch to in the waiting queue. We then scan the active queue. if the Fiber we want to switch to is active, the switch fails. If it is waiting and the calling Fiber is in the active queue, we copy the context of the cpu and fpu of \textit{current} into the struct representing the calling Fiber and the contexts of the Fiber we want to switch to are moved into \textit{current}. The two Fibers involved in the switching are swapped from one queue to the other.
 \end{itemize}
 
 \subsection{FLS}
-The Fiber Local Storage is implemented as an array of \textit{long} \textit{long} along with a bitmask. The value 1 in the position n of the mask means that the index is available for usage, 0 means the opposite. The size of such array is 1024 bytes for each Fiber.
+The Fiber Local Storage is implemented as an array of \textit{long} \textit{long} along with a bitmask. The value 1 in the position n of the mask means that the index is available for usage, 0 means the opposite. The size of such array is 1024 bytes for each Fiber. The struct holding the FLS is created contextually with the creation of the Fiber. IOCTLS are used to work with the FLS.
+\begin{itemize}
+\item IOCTL\_ALLOC: the function checks if the FLS array is available; if not, it is dynamically allocated. If the array is allocated, we check in the bitmask if there is a bit set to 0: it is set to 1 so that it can be used by the Fiber.
+\item IOCTL\_SET and IOCTL\_GET: both function check if the bit corresponding to the index we want to access is set to 1. If it is true, the get function returns the content while the set functions sets the content that was passed as argument. On the contrary, if the bit is set to 0, an error is returned.
+\item IOCTL\_FREE: the function sets the bit corresponding to the index passed as argument to 0.
+\end{itemize}
+
 \subsection{Cleanup}
+The cleanup is managed by registering a kprobe on the \texttt{do\_exit()} function. We scan the hashtable to find the process which the thread that exited belongs to. Then, we scan the running queue to look for the Fiber running on the top of the current thread, we remove it from the queue and we free the memory. Consequently, we check if there are running Fibers left; if there are we exit from the function, otherwise it means that the whole process terminated and so we delete all the Fibers in the waiting queue.
 \subsection{proc}
+The exposition of Fibers information in the proc FS is done through the use usage of kretprobes.\\
+In order to show the \textit{fibers} folder inside the \textit{PID} folder in \textit{proc} we probe the functions \texttt{proc\_pident\_lookup} and \texttt{proc\_pident\_readdir}.
 
 
-
-
-
-
-
+\section{Benchmark}
 \end{document}
