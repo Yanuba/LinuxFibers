@@ -15,16 +15,18 @@
 
 \documentclass[11pt]{article}
 \usepackage[italian, english]{babel}
-\usepackage[hidelinks]{hyperref}
+\usepackage{hyperref}
 \usepackage{amsmath}
 \usepackage{acl2013}
 \usepackage{times}
+\usepackage{float}
 \usepackage{url}
 \usepackage{latexsym}
 \usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage[table]{xcolor}
 \usepackage{array}
+\usepackage{multirow}
 \newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
 \setlength\titlebox{6.5cm}    % You can expand the title box if you
 % really have to
@@ -88,6 +90,80 @@ In order to show the \textit{fibers} folder inside the \textit{PID} folder in \t
 We retrieve the original function by using the \texttt{kallsyms\_lookup\_name} function.
 
 \section{Benchmark}
+The experiments were firstly run on a physical machine with a 8-core i7-4710HQ, 16GB of RAM mounting a Ubuntu 18.04 kernel 4.15 and later on a virtual machine with a 4-core i7-7700HQ with 8GB of RAM mounting the same operating system and kernel version of the physical machine.
+
+\begin{center}
+\begin{table}[H]
+\begin{tabular}{|c|l|c|c|c|c|c|}
+\hline
+\multicolumn{1}{|l|}{}            & \multicolumn{1}{l|}{\#Fibers} & 16        & 64        & 128       & 512       & 1024      \\ \hline
+\multirow{2}{*}{Monoprocess}      & Init time (s)                 & 0.0000000 & 0.0010000 & 0.0010000 & 0.0040000 & 0.0080000 \\ \cline{2-7} 
+                                  & Running time (s)              & 0.2570630 & 0.2624060 & 0.2526880 & 0.2488140 & 0.2778080 \\ \hline
+\multirow{2}{*}{Multiprocess (4)} & Init time (avg s)             & 0.0035000 & 0.0105000 & 0.0097500 & 0.0167500 & 0.0200000 \\ \cline{2-7} 
+                                  & Running time (avg s)          & 0.8582655 & 0.9955703 & 1.1404298 & 0.9817238 & 1.0038593 \\ \hline
+\end{tabular}
+\caption{User-space results.}
+\label{tablet1}
+\end{table}
+\end{center}
+
+\begin{center}
+\begin{table}[H]
+\begin{tabular}{|c|l|c|c|c|c|c|}
+\hline
+\multicolumn{1}{|l|}{}            & \multicolumn{1}{l|}{\#Fibers} & 16       & 64       & 128      & 512       & 1024     \\ \hline
+\multirow{2}{*}{Monoprocess}      & Init time (s)                 & 0.0000000        & 0.0010000    & 0.0010000    & 0.0030000     & 0.0060000    \\ \cline{2-7} 
+                                  & Running time (s)              & 0.301438 & 0.289719 & 0.293227 & 0.286602  & 0.288016 \\ \hline
+\multirow{2}{*}{Multiprocess (4)} & Init time (avg s)             & 0.00775  & 0.0065   & 0.0065   & 0.00775   & 0.01925  \\ \cline{2-7} 
+                                  & Running time (avg s)          & 1.040703 & 1.152488 & 1.25908  & 1.3222558 & 1.737544 \\ \hline
+\end{tabular}
+\caption{Kernel-space results.}
+\label{table:t2}
+\end{table}
+\end{center}
+
+\newpage
+
+\subsection{Virtual Machine}
+The following tables show the time elapsed for the initialization and the execution of the Fibers according to the number of fibers and the number of processes. Table \ref{tablet1} shows the results for the user-space implementation while Table \ref{table:t2} for the kernel-space one.
+
+\newpage
+
+
+\subsection{Physical Machine}
+The following tables show the result of the execution on the physical machine.
+
+\begin{center}
+\begin{table}[H]
+\begin{tabular}{|c|l|c|c|c|c|c|}
+\hline
+\multicolumn{1}{|l|}{}            & \#Fibers             & 16        & 64        & 128       & 512       & 1024      \\ \hline
+\multirow{2}{*}{Monoprocess}      & Init time (s)        & 0.0010000 & 0.0010000 & 0.0040000 & 0.0150000 & 0.0120000 \\ \cline{2-7} 
+                                  & Running time (s)     & 0.3418130 & 0.3289530 & 0.3288360 & 0.3566000 & 0.3526230 \\ \hline
+\multirow{2}{*}{Multiprocess (4)} & Init time (avg s)    & 0.0140000 & 0.0010000 & 0.0242500 & 0.0280000 & 0.0217500 \\ \cline{2-7} 
+                                  & Running time (avg s) & 1.1720468 & 1.2499963 & 1.2693193 & 1.5069943 & 1.7538790 \\ \hline
+\end{tabular}
+\caption{User-space results.}
+\label{table:t3}
+\end{table}
+\end{center}
+
+
+
+\begin{center}
+\begin{table}[H]
+\begin{tabular}{|c|l|c|c|c|c|c|}
+\hline
+\multicolumn{1}{|l|}{}            & \#Fibers             & 16        & 64        & 128       & 512       & 1024      \\ \hline
+\multirow{2}{*}{Monoprocess}      & Init time (s)        & 0.0000000 & 0.0010000 & 0.0010000 & 0.0050000 & 0.0070000 \\ \cline{2-7} 
+                                  & Running time (s)     & 0.3694370 & 0.3689690 & 0.3648910 & 0.3689900 & 0.4343290 \\ \hline
+\multirow{2}{*}{Multiprocess (4)} & Init time (avg s)    & 0.0000000 & 0.0347500 & 0.0095000 & 0.0315000 & 0.0260000 \\ \cline{2-7} 
+                                  & Running time (avg s) & 1.4388908 & 1.4374805 & 1.6085525 & 1.6440565 & 2.1317930 \\ \hline
+\end{tabular}
+\caption{Kernel-space results.}
+\label{table:t4}
+\end{table}
+\end{center}
 
 
 \end{document}
