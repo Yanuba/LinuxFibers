@@ -2,7 +2,6 @@
 #include <linux/kallsyms.h>
 
 #include "proc.h"
-//remove dead code
 //locks
 
 static proc_pident_lookup_t origin_proc_pident_lookup;
@@ -18,8 +17,7 @@ struct file_operations fops = {
 
 struct inode_operations iops = {
     .lookup = fibers_lookup,
-    //missing getattr e setattr
-};                           
+};
 
 struct file_operations fiber_ops = {
     .owner = THIS_MODULE,
@@ -28,28 +26,26 @@ struct file_operations fiber_ops = {
 
 struct pid_entry fiber_folder = DIR("fibers", S_IRUGO | S_IXUGO, iops, fops);
 
-void _set_functions_from_proc() 
+void _set_functions_from_proc()
 {
-    origin_proc_pident_lookup = kallsyms_lookup_name("proc_pident_lookup");
-    origin_proc_pident_readdir = kallsyms_lookup_name("proc_pident_readdir");
+    origin_proc_pident_lookup = (void *) kallsyms_lookup_name("proc_pident_lookup");
+    origin_proc_pident_readdir = (void *) kallsyms_lookup_name("proc_pident_readdir");
 }
 
 int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_instance *p, struct pt_regs *regs)
 {
-    struct inode *dir;
     struct dentry *dentry;
     struct pid_entry *ents;
     unsigned int nents;
 
     unsigned long folder_pid;
     struct process_active *process;
-    
+
     struct kret_data *pdata;
-    
-    pdata = (struct kret_data *) p->data;
+
+    pdata = (struct kret_data *)p->data;
     pdata->ents = NULL;
 
-    dir = (struct inode *)regs->di;
     dentry = (struct dentry *)regs->si;
     ents = (struct pid_entry *)regs->dx;
     nents = (unsigned int)regs->cx;
@@ -72,10 +68,11 @@ int _lookup_handler(struct module_hashtable *process_table, struct kretprobe_ins
     return 0;
 }
 
-int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
-    
+int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs *regs)
+{
+
     struct kret_data *pdata;
-    pdata = (struct kret_data *) p->data;
+    pdata = (struct kret_data *)p->data;
     if (pdata->ents)
         kfree(pdata->ents);
     return 0;
@@ -85,19 +82,17 @@ int kprobe_proc_post_lookup_handler(struct kretprobe_instance *p, struct pt_regs
 int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_instance *p, struct pt_regs *regs) //params in di, si, dx, cx
 {
     struct file *file;
-    struct dir_context *ctx;
     struct pid_entry *ents;
     unsigned int nents;
     unsigned long folder_pid;
     struct process_active *process;
 
     struct kret_data *pdata;
-    
-    pdata = (struct kret_data *) p->data;
+
+    pdata = (struct kret_data *)p->data;
     pdata->ents = NULL;
 
     file = (struct file *)regs->di;
-    ctx = (struct dir_context *)regs->si;
     ents = (struct pid_entry *)regs->dx;
     nents = (unsigned int)regs->cx;
 
@@ -115,13 +110,14 @@ int _readdir_handler(struct module_hashtable *process_table, struct kretprobe_in
 
     regs->dx = (unsigned long)pdata->ents;
     regs->cx = nents + 1;
-    
+
     return 0;
 }
 
-int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs) {
+int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_regs *regs)
+{
     struct kret_data *pdata;
-    pdata = (struct kret_data *) p->data;
+    pdata = (struct kret_data *)p->data;
     if (pdata->ents)
         kfree(pdata->ents);
     return 0;
@@ -130,7 +126,7 @@ int kprobe_proc_post_readdir_handler(struct kretprobe_instance *p, struct pt_reg
 int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct module_hashtable *process_table)
 {
 
-    unsigned long folder_pid;
+    unsigned long folder_pid, flags;
     struct process_active *process;
     struct pid_entry *ents;
     struct fiber_struct *fiber;
@@ -148,10 +144,12 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
         return 0;
 
 
+    spin_lock_irqsave(&process->lock, flags);
     next = process->next_fid;
 
     ents = kmalloc(sizeof(struct pid_entry) * next, GFP_KERNEL);
     nents = 0;
+
     hlist_for_each_entry(fiber, &process->running_fibers, next)
     {
         ents[nents].name = fiber->name;
@@ -173,6 +171,7 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
 
         nents++;
     }
+    spin_unlock_irqrestore(&process->lock, flags);
 
     ret_val = origin_proc_pident_readdir(file, ctx, ents, nents);
 
@@ -181,9 +180,9 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
     return ret_val;
 }
 
-struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, unsigned int flags, struct module_hashtable *process_table)
+struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, unsigned int flg, struct module_hashtable *process_table)
 {
-    unsigned long folder_pid;
+    unsigned long folder_pid, flags;
     struct process_active *process;
     struct pid_entry *ents;
     struct fiber_struct *fiber;
@@ -198,11 +197,13 @@ struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, u
 
     if (!process)
         return NULL;
-
+  
+    spin_lock_irqsave(&process->lock, flags);
     next = process->next_fid;
 
     ents = kmalloc(sizeof(struct pid_entry) * next, GFP_KERNEL);
     nents = 0;
+
     hlist_for_each_entry(fiber, &process->running_fibers, next)
     {
         ents[nents].name = fiber->name;
@@ -224,6 +225,7 @@ struct dentry *fibers_lookup_handler(struct inode *dir, struct dentry *dentry, u
 
         nents++;
     }
+    spin_unlock_irqrestore(&process->lock, flags);
 
     ret_val = origin_proc_pident_lookup(dir, dentry, ents, nents);
 
@@ -237,7 +239,7 @@ ssize_t fiber_read_handler(struct file *file, char __user *buff, size_t count, l
 
     char fiber_info[512];
     unsigned long fiber_id;
-    unsigned long pid;
+    unsigned long pid, flags;
     size_t bytes_written, offset;
     struct process_active *process;
     struct fiber_struct *fiber;
@@ -253,7 +255,7 @@ ssize_t fiber_read_handler(struct file *file, char __user *buff, size_t count, l
     if (!process)
         return 0;
 
-
+    spin_lock_irqsave(&process->lock, flags);
     hlist_for_each_entry(fiber, &process->running_fibers, next)
     {
 
@@ -266,6 +268,8 @@ ssize_t fiber_read_handler(struct file *file, char __user *buff, size_t count, l
         if (fiber->fiber_id == fiber_id)
             goto PRINT;
     }
+
+    spin_unlock_irqrestore(&process->lock, flags);
     return 0;
 
 PRINT:
@@ -281,6 +285,7 @@ PRINT:
                              fiber->parent_thread, fiber->activations,
                              fiber->failed_activations,
                              fiber->execution_time);
+    spin_unlock_irqrestore(&process->lock, flags);
 
     if (*f_pos >= bytes_written)
         return 0;
