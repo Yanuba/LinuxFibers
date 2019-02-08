@@ -2,7 +2,6 @@
 #include <linux/kallsyms.h>
 
 #include "proc.h"
-//locks
 
 static proc_pident_lookup_t origin_proc_pident_lookup;
 static proc_pident_readdir_t origin_proc_pident_readdir;
