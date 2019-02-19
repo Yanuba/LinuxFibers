@@ -139,7 +139,6 @@ int fibers_readdir_handler(struct file *file, struct dir_context *ctx, struct mo
     if (kstrtoul(file->f_path.dentry->d_parent->d_name.name, 10, &folder_pid))
         return 0;
 
-    //may use a lock
     process = find_process(process_table, folder_pid);
 
     if (!process)
