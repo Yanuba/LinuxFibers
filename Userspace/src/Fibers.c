@@ -7,7 +7,6 @@
 #include <strings.h>
 
 #include "Fibers.h"
-#include "Fibers_ioctls.h"
 
 static pid_t _CALLER_PID;
 static int _FIBER_DESCRIPTOR = -1;
