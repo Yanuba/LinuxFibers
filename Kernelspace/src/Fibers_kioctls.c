@@ -81,8 +81,8 @@ long _ioctl_convert(struct process_active *process, fiber_t *arg)
 
     fid = process->next_fid++;
     fiber = allocate_fiber(fid, current, NULL, NULL, NULL);
-
     hlist_add_head(&(fiber->next), &(process->running_fibers));
+    
     spin_unlock_irqrestore(&process->lock, flags);
 
     if (copy_to_user((void *)arg, (void *)&fiber->fiber_id, sizeof(fiber_t)))
