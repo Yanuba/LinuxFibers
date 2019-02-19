@@ -69,19 +69,19 @@ long _ioctl_convert(struct process_active *process, fiber_t *arg)
     if (!process || process->tgid != tgid)
         return -ENOTTY;
 
+    spin_lock_irqsave(&process->lock, flags);
     hlist_for_each_entry(fiber, &process->running_fibers, next)
     {
         if (fiber->parent_thread == pid)
+        {
+            spin_unlock_irqrestore(&process->lock, flags);
             return -ENOTTY;
+        }
     }
 
-    spin_lock_irqsave(&process->lock, flags);
     fid = process->next_fid++;
-    spin_unlock_irqrestore(&process->lock, flags);
-
     fiber = allocate_fiber(fid, current, NULL, NULL, NULL);
 
-    spin_lock_irqsave(&process->lock, flags);
     hlist_add_head(&(fiber->next), &(process->running_fibers));
     spin_unlock_irqrestore(&process->lock, flags);
 
