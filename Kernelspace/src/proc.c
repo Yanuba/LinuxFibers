@@ -7,6 +7,7 @@ static proc_pident_lookup_t origin_proc_pident_lookup;
 static proc_pident_readdir_t origin_proc_pident_readdir;
 
 //copyed from proc/base.h
+//for Fibers folder
 struct file_operations fops = {
     .owner = THIS_MODULE,
     .read = generic_read_dir,
@@ -14,10 +15,12 @@ struct file_operations fops = {
     .llseek = generic_file_llseek,
 };
 
+//for Fibers folderf
 struct inode_operations iops = {
     .lookup = fibers_lookup,
 };
 
+//for Fiber file 
 struct file_operations fiber_ops = {
     .owner = THIS_MODULE,
     .read = fiber_read,
