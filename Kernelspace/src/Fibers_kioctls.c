@@ -323,9 +323,12 @@ long _ioctl_free(struct process_active *process, long *arg)
     if (storage->fls == NULL || storage->used_index == NULL)
         return -ENOTTY;
 
-    storage->size -= 1;
-    clear_bit(index, storage->used_index);
-
+    if (test_bit(index, storage->used_index)) 
+    {
+        storage->size -= 1;
+        clear_bit(index, storage->used_index);
+    }
+    
     return 0;
 }
 
