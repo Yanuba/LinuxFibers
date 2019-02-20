@@ -182,7 +182,7 @@ static int __init fibers_init(void)
 
     printk(KERN_NOTICE "%s: Module mounted, device registered with major %d \n", KBUILD_MODNAME, dev_major);
 
-    hash_init(process_table.htable); //should be destroyed?
+    hash_init(process_table.htable);
     spin_lock_init(&process_table.lock);
 
     ret = register_kprobe(&probe);
