@@ -1,6 +1,8 @@
 Fibers Testbed
 ==============
 
+From https://www.diag.uniroma1.it/~pellegrini/didattica/2017/aosv.html
+
 This package implements a simple testbed application for fibers usage,
 which can be used to stress test, debug, and profile the assignment for
 the Advanced Operating Systems and Virtualization 2017/2018 course.
